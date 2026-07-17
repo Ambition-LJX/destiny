@@ -6,6 +6,8 @@ FROM node:20-alpine AS base
 # libssl 版本而回退到错误的引擎二进制，导致 "Could not parse schema engine response"
 RUN apk add --no-cache openssl libc6-compat
 RUN corepack enable
+# Prisma 引擎二进制从国内镜像下载，避免默认 binaries.prisma.sh 在国内网络卡死
+ENV PRISMA_ENGINES_MIRROR=https://registry.npmmirror.com/-/binary/prisma
 WORKDIR /repo
 
 # ---- 依赖安装 ----
