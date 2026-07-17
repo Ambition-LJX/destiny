@@ -1,0 +1,99 @@
+// Prisma schema · AI 八字命术系统
+// 数据模型对应系统设计方案第 5 节
+
+generator client {
+  provider      = "prisma-client-js"
+  // native = 宿主平台（本地开发）；linux-musl-openssl-3.0.x = Alpine 容器运行时
+  binaryTargets = ["native", "linux-musl-openssl-3.0.x"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+/// 用户账户
+model User {
+  id           String    @id @default(uuid())
+  email        String    @unique
+  passwordHash String    @map("password_hash")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+  deletedAt    DateTime? @map("deleted_at")
+
+  profiles Profile[]
+
+  @@map("users")
+}
+
+/// 命盘档案（一个账户可管理多个人的命盘）
+model Profile {
+  id                String    @id @default(uuid())
+  userId            String    @map("user_id")
+  name              String
+  gender            String // male | female
+  birthCalendar     String    @map("birth_calendar") // solar | lunar
+  /// 出生时间敏感字段，应用层加密存储（密文）
+  birthDatetimeEnc  String    @map("birth_datetime_enc")
+  longitude         Float
+  latitude          Float
+  hourKnown         Boolean   @map("hour_known")
+  useTrueSolarTime  Boolean   @map("use_true_solar_time")
+  isLeapMonth       Boolean   @default(false) @map("is_leap_month")
+  createdAt         DateTime  @default(now()) @map("created_at")
+  updatedAt         DateTime  @updatedAt @map("updated_at")
+  deletedAt         DateTime? @map("deleted_at")
+
+  user   User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  charts Chart[]
+
+  @@index([userId])
+  @@map("profiles")
+}
+
+/// 排盘结果缓存
+model Chart {
+  id            String   @id @default(uuid())
+  profileId     String   @map("profile_id")
+  engineVersion String   @map("engine_version")
+  /// 排盘结构化结果（BaziChart JSON）
+  chartJson     Json     @map("chart_json")
+  /// 输入指纹，相同输入不重复计算
+  inputHash     String   @map("input_hash")
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  profile Profile  @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  reports Report[]
+
+  @@index([profileId])
+  @@index([inputHash])
+  @@map("charts")
+}
+
+/// AI 解读报告
+model Report {
+  id           String   @id @default(uuid())
+  chartId      String   @map("chart_id")
+  dimension    String // 报告维度：personality/career/wealth/...
+  content      String   @db.Text
+  modelVersion String   @map("model_version")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  chart Chart @relation(fields: [chartId], references: [id], onDelete: Cascade)
+
+  @@index([chartId])
+  @@map("reports")
+}
+
+/// RAG 命理知识库
+model KnowledgeChunk {
+  id        String   @id @default(uuid())
+  topic     String
+  /// 盘面特征标签（十神组合/旺衰/格局），用于召回
+  tags      String[]
+  content   String   @db.Text
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([topic])
+  @@map("knowledge_chunks")
+}

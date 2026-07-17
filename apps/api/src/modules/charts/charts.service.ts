@@ -1,0 +1,143 @@
+import { Injectable, Logger } from '@nestjs/common';
+import { calculateBazi, ENGINE_VERSION } from '@app/bazi-engine';
+import type { BaziChart, BirthInput } from '@app/bazi-engine';
+import { PrismaService } from '../../prisma/prisma.service';
+import { CryptoService } from '../../common/crypto/crypto.service';
+import { RedisService } from '../../redis/redis.service';
+import { ProfilesService, BirthPayload } from '../profiles/profiles.service';
+
+/**
+ * 排盘结果视图。
+ */
+export interface ChartResult {
+  chartId: string;
+  engineVersion: string;
+  chart: BaziChart;
+  cached: boolean;
+}
+
+/**
+ * 排盘服务：解密出生信息 → 调用引擎 → 缓存并落库。
+ *
+ * 引擎为纯函数，相同输入必得相同结果，故对 (输入指纹 + 引擎版本) 做缓存去重。
+ */
+@Injectable()
+export class ChartsService {
+  private readonly logger = new Logger(ChartsService.name);
+  private static readonly CACHE_TTL = 60 * 60 * 24 * 7; // 7 天
+
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly crypto: CryptoService,
+    private readonly redis: RedisService,
+    private readonly profiles: ProfilesService,
+  ) {}
+
+  /**
+   * 为指定档案排盘。
+   */
+  async calculate(userId: string, profileId: string): Promise<ChartResult> {
+    const profile = await this.profiles.getOwnedOrThrow(userId, profileId);
+    const birth = this.profiles.decryptBirth(profile.birthDatetimeEnc);
+
+    const input = this.toBirthInput(
+      birth,
+      profile.gender as 'male' | 'female',
+      profile.longitude,
+      profile.latitude,
+      profile.useTrueSolarTime,
+    );
+    const inputHash = this.crypto.hash(`${ENGINE_VERSION}:${JSON.stringify(input)}`);
+
+    // Redis 缓存
+    const cacheKey = `chart:${inputHash}`;
+    const cachedRaw = await this.redis.get(cacheKey);
+    if (cachedRaw) {
+      const chart = JSON.parse(cachedRaw) as BaziChart;
+      const persisted = await this.ensurePersisted(profileId, inputHash, chart);
+      return { chartId: persisted.id, engineVersion: ENGINE_VERSION, chart, cached: true };
+    }
+
+    // 数据库缓存（同一档案同一输入已算过）
+    const existing = await this.prisma.chart.findFirst({
+      where: { profileId, inputHash },
+      orderBy: { createdAt: 'desc' },
+    });
+    if (existing) {
+      const chart = existing.chartJson as unknown as BaziChart;
+      await this.redis.set(cacheKey, JSON.stringify(chart), ChartsService.CACHE_TTL);
+      return { chartId: existing.id, engineVersion: existing.engineVersion, chart, cached: true };
+    }
+
+    // 实际排盘
+    const chart = calculateBazi(input);
+    const saved = await this.prisma.chart.create({
+      data: {
+        profileId,
+        engineVersion: ENGINE_VERSION,
+        chartJson: chart as unknown as object,
+        inputHash,
+      },
+    });
+    await this.redis.set(cacheKey, JSON.stringify(chart), ChartsService.CACHE_TTL);
+
+    return { chartId: saved.id, engineVersion: ENGINE_VERSION, chart, cached: false };
+  }
+
+  /**
+   * 读取已保存的排盘（含权限校验）。
+   */
+  async getChart(userId: string, chartId: string): Promise<ChartResult> {
+    const chart = await this.prisma.chart.findUnique({
+      where: { id: chartId },
+      include: { profile: true },
+    });
+    if (!chart || chart.profile.userId !== userId || chart.profile.deletedAt) {
+      throw new Error('排盘结果不存在或无权访问');
+    }
+    return {
+      chartId: chart.id,
+      engineVersion: chart.engineVersion,
+      chart: chart.chartJson as unknown as BaziChart,
+      cached: true,
+    };
+  }
+
+  private async ensurePersisted(profileId: string, inputHash: string, chart: BaziChart) {
+    const existing = await this.prisma.chart.findFirst({
+      where: { profileId, inputHash },
+      orderBy: { createdAt: 'desc' },
+    });
+    if (existing) return existing;
+    return this.prisma.chart.create({
+      data: {
+        profileId,
+        engineVersion: ENGINE_VERSION,
+        chartJson: chart as unknown as object,
+        inputHash,
+      },
+    });
+  }
+
+  private toBirthInput(
+    birth: BirthPayload,
+    gender: 'male' | 'female',
+    longitude: number,
+    latitude: number,
+    useTrueSolarTime: boolean,
+  ): BirthInput {
+    return {
+      calendar: birth.calendar,
+      year: birth.year,
+      month: birth.month,
+      day: birth.day,
+      hour: birth.hour,
+      minute: birth.minute,
+      gender,
+      longitude,
+      latitude,
+      useTrueSolarTime,
+      isLeapMonth: birth.isLeapMonth,
+    };
+  }
+}

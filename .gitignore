@@ -1,0 +1,37 @@
+# ---- dependencies ----
+node_modules/
+.pnpm-store/
+
+# ---- build outputs ----
+dist/
+build/
+.next/
+out/
+*.tsbuildinfo
+
+# ---- env & secrets ----
+.env
+.env.local
+.env.*.local
+*.pem
+
+# ---- logs ----
+logs/
+*.log
+npm-debug.log*
+pnpm-debug.log*
+
+# ---- coverage / test ----
+coverage/
+.nyc_output/
+
+# ---- editor / os ----
+.DS_Store
+.idea/
+.vscode/*
+!.vscode/extensions.json
+Thumbs.db
+
+# ---- misc ----
+.cache/
+tmp/

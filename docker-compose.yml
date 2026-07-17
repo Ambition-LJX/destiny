@@ -1,0 +1,84 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: destiny-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-destiny}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-destiny_pwd}
+      POSTGRES_DB: ${POSTGRES_DB:-destiny}
+    # 仅容器内网访问，不对公网暴露。如需从宿主机连库调试，改为 "127.0.0.1:5432:5432"
+    expose:
+      - "5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-destiny}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: destiny-redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes
+    # 仅容器内网访问，不对公网暴露
+    expose:
+      - "6379"
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    container_name: destiny-api
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      PORT: 3001
+      DATABASE_URL: postgresql://${POSTGRES_USER:-destiny}:${POSTGRES_PASSWORD:-destiny_pwd}@postgres:5432/${POSTGRES_DB:-destiny}?schema=public
+      REDIS_URL: redis://redis:6379
+      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:-change-me-access}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:-change-me-refresh}
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY:-0123456789abcdef0123456789abcdef}
+      CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:3000}
+      LLM_PROVIDER: ${LLM_PROVIDER:-mock}
+      LLM_API_KEY: ${LLM_API_KEY:-}
+      LLM_BASE_URL: ${LLM_BASE_URL:-https://api.openai.com/v1}
+      LLM_MODEL: ${LLM_MODEL:-gpt-4o-mini}
+    # 仅容器内网访问，前端在内网反代到此服务，不对公网暴露
+    expose:
+      - "3001"
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+      args:
+        # Next.js 在构建期固化 rewrites() 目标，需在此注入容器网络内的 API 地址
+        API_PROXY_TARGET: http://api:3001
+    container_name: destiny-web
+    restart: unless-stopped
+    depends_on:
+      - api
+    environment:
+      NODE_ENV: production
+    # 唯一对外暴露端口：ip:8082 即可访问项目
+    ports:
+      - "${WEB_PORT:-8082}:3000"
+
+volumes:
+  pgdata:
+  redisdata:
