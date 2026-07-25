@@ -61,8 +61,12 @@ destiny/
 │           ├── components/ # 通用组件
 │           ├── features/   # 命盘/报告/问答功能模块
 │           └── lib/        # API 客户端、状态、工具
-├── docker-compose.yml
-├── DEPLOYMENT.md           # 详细部署文档
+├── docker-compose.dev.yml   # 开发环境
+├── docker-compose.prod.yml  # 生产环境
+├── .env.example             # 环境变量参考模板
+├── .env.docker.dev          # 开发环境变量
+├── .env.docker.prod         # 生产环境变量
+├── DEPLOYMENT.md            # 精简部署命令手册
 └── pnpm-workspace.yaml
 ```
 
@@ -73,13 +77,16 @@ destiny/
 最快方式（Docker）：
 
 ```bash
-cp .env.example .env
-docker compose up -d --build
+# 开发环境
+docker compose --env-file .env.docker.dev -f docker-compose.dev.yml up
+
+# 生产环境
+docker compose --env-file .env.docker.prod -f docker-compose.prod.yml up -d --build
 ```
 
-访问 http://localhost:3000 。
+访问 http://localhost:8080 。
 
-完整的工具安装、本地开发、生产部署与接入真实大模型说明见 [DEPLOYMENT.md](./DEPLOYMENT.md)。
+完整部署命令见 [DEPLOYMENT.md](./DEPLOYMENT.md)。
 
 ---
 

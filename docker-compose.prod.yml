@@ -1,20 +1,28 @@
 # ============================================================
-#  生产环境（standalone 构建） —— docker compose -f docker-compose.prod.yml up -d --build
+#  生产环境（standalone 构建，严格端口隔离）
+#  启动：docker compose --env-file .env.docker.prod -f docker-compose.prod.yml up -d --build
+# ============================================================
+#  端口策略：
+#   - postgres / redis / api 仅 expose 给内部网络，不映射宿主机
+#   - 仅 web 映射 8080 -> 3000，浏览器通过 ip:8080 访问
+#  网络隔离：
+#   - 使用专属网络 destiny-prod-net，与其他项目互不干扰
 # ============================================================
 services:
   postgres:
     image: postgres:16-alpine
-    container_name: destiny-postgres
+    container_name: destiny-prod-postgres
     restart: always
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-destiny}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
       POSTGRES_DB: ${POSTGRES_DB:-destiny}
-    # 仅容器内网访问，不对公网暴露
     expose:
       - "5432"
     volumes:
       - pgdata_prod:/var/lib/postgresql/data
+    networks:
+      - destiny-prod-net
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-destiny}"]
       interval: 10s
@@ -28,14 +36,15 @@ services:
 
   redis:
     image: redis:7-alpine
-    container_name: destiny-redis
+    container_name: destiny-prod-redis
     restart: always
     command: redis-server --appendonly yes --save 60 1
-    # 仅容器内网访问，不对公网暴露
     expose:
       - "6379"
     volumes:
       - redisdata_prod:/data
+    networks:
+      - destiny-prod-net
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
@@ -51,7 +60,7 @@ services:
     build:
       context: .
       dockerfile: apps/api/Dockerfile
-    container_name: destiny-api
+    container_name: destiny-prod-api
     restart: always
     depends_on:
       postgres:
@@ -71,9 +80,10 @@ services:
       LLM_API_KEY: ${LLM_API_KEY:-}
       LLM_BASE_URL: ${LLM_BASE_URL:-https://api.openai.com/v1}
       LLM_MODEL: ${LLM_MODEL:-gpt-4o-mini}
-    # 仅容器内网访问，通过 Next.js 反代，不对公网暴露
     expose:
       - "3001"
+    networks:
+      - destiny-prod-net
     logging:
       driver: "json-file"
       options:
@@ -87,7 +97,7 @@ services:
       args:
         API_PROXY_TARGET: http://api:3001
         NEXT_PUBLIC_API_BASE: /api
-    container_name: destiny-web
+    container_name: destiny-prod-web
     restart: always
     depends_on:
       - api
@@ -95,15 +105,24 @@ services:
       NODE_ENV: production
       HOSTNAME: "0.0.0.0"
       PORT: "3000"
-    # 唯一对外暴露端口：宿主机 ${WEB_PORT} -> 容器 3000
     ports:
+      # 唯一对外暴露端口：宿主机 8080 -> 容器 3000
       - "${WEB_PORT:-8080}:3000"
+    networks:
+      - destiny-prod-net
     logging:
       driver: "json-file"
       options:
         max-size: "10m"
         max-file: "3"
 
+networks:
+  destiny-prod-net:
+    name: destiny-prod-net
+    driver: bridge
+
 volumes:
   pgdata_prod:
+    name: destiny-prod-pgdata
   redisdata_prod:
+    name: destiny-prod-redisdata
