@@ -36,6 +36,7 @@ RUN pnpm --filter @app/bazi-engine build \
 # ---- 运行时 ----
 FROM base AS runtime
 ENV NODE_ENV=production
+ENV HOSTNAME=0.0.0.0
 # 复制 packageManager 声明与工作区配置，确保 corepack 使用锁定的 pnpm 版本
 COPY --from=build /repo/pnpm-workspace.yaml /repo/package.json ./
 COPY --from=build /repo/node_modules ./node_modules

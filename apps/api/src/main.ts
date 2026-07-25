@@ -27,9 +27,10 @@ async function bootstrap() {
   app.useGlobalInterceptors(new ResponseInterceptor());
 
   const port = Number(process.env.PORT ?? 3001);
-  await app.listen(port);
+  const hostname = process.env.HOSTNAME ?? '0.0.0.0';
+  await app.listen(port, hostname);
 
-  Logger.log(`🔮 API 已启动: http://localhost:${port}/${globalPrefix}`, 'Bootstrap');
+  Logger.log(`🔮 API 已启动: http://${hostname}:${port}/${globalPrefix}`, 'Bootstrap');
 }
 
 bootstrap();
