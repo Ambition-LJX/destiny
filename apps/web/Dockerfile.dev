@@ -1,0 +1,22 @@
+# syntax=docker/dockerfile:1
+# ---- 开发环境：Next.js Web（支持热重载） ----
+
+FROM node:20-alpine AS base
+RUN apk add --no-cache libc6-compat
+RUN corepack enable
+WORKDIR /repo
+
+# 复制 workspace 配置与锁文件
+COPY pnpm-workspace.yaml package.json pnpm-lock.yaml* .npmrc* ./
+COPY apps/web/package.json apps/web/
+
+# 安装全部依赖（含 devDependencies）
+RUN pnpm install --frozen-lockfile=false
+
+WORKDIR /repo/apps/web
+
+# 默认开发命令（next dev，监听 0.0.0.0 以接受容器外访问）
+ENV HOSTNAME=0.0.0.0
+ENV PORT=3000
+EXPOSE 3000
+CMD ["pnpm", "dev"]

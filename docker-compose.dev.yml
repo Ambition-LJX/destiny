@@ -1,0 +1,118 @@
+# ============================================================
+#  开发环境（hot-reload） —— docker compose -f docker-compose.dev.yml up
+# ============================================================
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: destiny-dev-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-destiny}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-destiny_pwd}
+      POSTGRES_DB: ${POSTGRES_DB:-destiny}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - pgdata_dev:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-destiny}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    container_name: destiny-dev-redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redisdata_dev:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile.dev
+    container_name: destiny-dev-api
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      NODE_ENV: development
+      PORT: 3001
+      DATABASE_URL: postgresql://${POSTGRES_USER:-destiny}:${POSTGRES_PASSWORD:-destiny_pwd}@postgres:5432/${POSTGRES_DB:-destiny}?schema=public
+      REDIS_URL: redis://redis:6379
+      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:-dev-access-secret}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:-dev-refresh-secret}
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY:-0123456789abcdef0123456789abcdef}
+      CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:3000}
+      LLM_PROVIDER: ${LLM_PROVIDER:-mock}
+      LLM_API_KEY: ${LLM_API_KEY:-}
+      LLM_BASE_URL: ${LLM_BASE_URL:-https://api.openai.com/v1}
+      LLM_MODEL: ${LLM_MODEL:-gpt-4o-mini}
+      # NestJS watch 模式在 Docker 内需要启用轮询
+      CHOKIDAR_USEPOLLING: "true"
+    ports:
+      - "${API_PORT:-3001}:3001"
+    volumes:
+      # 挂载源码实现热重载
+      - ./packages/bazi-engine/src:/repo/packages/bazi-engine/src
+      - ./packages/bazi-engine/package.json:/repo/packages/bazi-engine/package.json
+      - ./packages/bazi-engine/tsconfig.json:/repo/packages/bazi-engine/tsconfig.json
+      - ./apps/api/src:/repo/apps/api/src
+      - ./apps/api/prisma:/repo/apps/api/prisma
+      - ./apps/api/package.json:/repo/apps/api/package.json
+      - ./apps/api/tsconfig.json:/repo/apps/api/tsconfig.json
+      - ./apps/api/nest-cli.json:/repo/apps/api/nest-cli.json
+      # node_modules 保留容器内版本（匿名卷，不被宿主机覆盖）
+      - /repo/node_modules
+      - /repo/packages/bazi-engine/node_modules
+      - /repo/apps/api/node_modules
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile.dev
+    container_name: destiny-dev-web
+    restart: unless-stopped
+    depends_on:
+      - api
+    environment:
+      NODE_ENV: development
+      HOSTNAME: "0.0.0.0"
+      PORT: "3000"
+      NEXT_PUBLIC_API_BASE: /api
+      # 运行时反代到 api 容器（next dev 启动时读取）
+      API_PROXY_TARGET: http://api:3001
+      # Next.js / webpack 在 Docker 挂载卷下需启用轮询以检测文件变更
+      CHOKIDAR_USEPOLLING: "true"
+      WATCHPACK_POLLING: "true"
+      NEXT_WEBPACK_USEPOLLING: "true"
+    ports:
+      - "${WEB_PORT:-3000}:3000"
+    volumes:
+      # 挂载源码和配置
+      - ./apps/web/src:/repo/apps/web/src
+      - ./apps/web/public:/repo/apps/web/public
+      - ./apps/web/package.json:/repo/apps/web/package.json
+      - ./apps/web/tsconfig.json:/repo/apps/web/tsconfig.json
+      - ./apps/web/next.config.js:/repo/apps/web/next.config.js
+      - ./apps/web/tailwind.config.js:/repo/apps/web/tailwind.config.js
+      - ./apps/web/postcss.config.js:/repo/apps/web/postcss.config.js
+      # node_modules 与 .next 保留容器内版本
+      - /repo/node_modules
+      - /repo/apps/web/node_modules
+      - /repo/apps/web/.next
+
+volumes:
+  pgdata_dev:
+  redisdata_dev:

@@ -1,0 +1,32 @@
+# syntax=docker/dockerfile:1
+# ---- 开发环境：NestJS API（支持热重载） ----
+
+FROM node:20-alpine AS base
+RUN apk add --no-cache openssl libc6-compat
+RUN corepack enable
+ENV PRISMA_ENGINES_MIRROR=https://registry.npmmirror.com/-/binary/prisma
+WORKDIR /repo
+
+# 复制 workspace 配置与锁文件
+COPY pnpm-workspace.yaml package.json pnpm-lock.yaml* .npmrc* ./
+COPY packages/bazi-engine/package.json packages/bazi-engine/
+COPY apps/api/package.json apps/api/
+
+# 安装全部依赖（含 devDependencies）
+RUN pnpm install --frozen-lockfile=false
+
+# 复制源码用于初始构建引擎与 Prisma Client 生成
+COPY tsconfig.base.json ./
+COPY packages/bazi-engine ./packages/bazi-engine
+COPY apps/api ./apps/api
+
+# 预构建引擎并生成 Prisma Client（容器内已有数据库连接时执行，否则由 entrypoint 处理）
+RUN pnpm --filter @app/bazi-engine build \
+  && pnpm --filter @app/api prisma:generate
+
+WORKDIR /repo/apps/api
+
+# 开发环境端口
+EXPOSE 3001
+# 使用 --watch 模式启动，配合 volume 挂载实现热重载
+CMD ["sh", "-c", "pnpm prisma:push && pnpm dev"]

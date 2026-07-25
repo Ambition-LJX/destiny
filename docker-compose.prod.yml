@@ -1,0 +1,109 @@
+# ============================================================
+#  生产环境（standalone 构建） —— docker compose -f docker-compose.prod.yml up -d --build
+# ============================================================
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: destiny-postgres
+    restart: always
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-destiny}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+      POSTGRES_DB: ${POSTGRES_DB:-destiny}
+    # 仅容器内网访问，不对公网暴露
+    expose:
+      - "5432"
+    volumes:
+      - pgdata_prod:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-destiny}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  redis:
+    image: redis:7-alpine
+    container_name: destiny-redis
+    restart: always
+    command: redis-server --appendonly yes --save 60 1
+    # 仅容器内网访问，不对公网暴露
+    expose:
+      - "6379"
+    volumes:
+      - redisdata_prod:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    container_name: destiny-api
+    restart: always
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      PORT: 3001
+      DATABASE_URL: postgresql://${POSTGRES_USER:-destiny}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-destiny}?schema=public
+      REDIS_URL: redis://redis:6379
+      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:?JWT_ACCESS_SECRET is required}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:?JWT_REFRESH_SECRET is required}
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY:?ENCRYPTION_KEY is required}
+      CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:8080}
+      LLM_PROVIDER: ${LLM_PROVIDER:-mock}
+      LLM_API_KEY: ${LLM_API_KEY:-}
+      LLM_BASE_URL: ${LLM_BASE_URL:-https://api.openai.com/v1}
+      LLM_MODEL: ${LLM_MODEL:-gpt-4o-mini}
+    # 仅容器内网访问，通过 Next.js 反代，不对公网暴露
+    expose:
+      - "3001"
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+      args:
+        API_PROXY_TARGET: http://api:3001
+        NEXT_PUBLIC_API_BASE: /api
+    container_name: destiny-web
+    restart: always
+    depends_on:
+      - api
+    environment:
+      NODE_ENV: production
+      HOSTNAME: "0.0.0.0"
+      PORT: "3000"
+    # 唯一对外暴露端口：宿主机 ${WEB_PORT} -> 容器 3000
+    ports:
+      - "${WEB_PORT:-8080}:3000"
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  pgdata_prod:
+  redisdata_prod:
