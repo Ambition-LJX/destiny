@@ -79,24 +79,37 @@ export class OpenAiCompatibleAdapter implements LlmAdapter {
     stream: boolean,
   ): Promise<Response> {
     const url = `${this.baseUrl.replace(/\/$/, '')}/chat/completions`;
-    const res = await fetch(url, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${this.apiKey}`,
-      },
-      body: JSON.stringify({
-        model: this.model,
-        messages,
-        temperature: options?.temperature ?? 0.7,
-        max_tokens: options?.maxTokens ?? 2048,
-        stream,
-      }),
-    });
+    this.logger.debug(`LLM 请求: ${url} stream=${stream}`);
+    let res: Response;
+    try {
+      res = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${this.apiKey}`,
+        },
+        body: JSON.stringify({
+          model: this.model,
+          messages,
+          temperature: options?.temperature ?? 0.7,
+          max_tokens: options?.maxTokens ?? 2048,
+          stream,
+        }),
+      });
+    } catch (err) {
+      this.logger.error(`LLM 网络请求异常: ${(err as Error).message}`);
+      throw new Error(`LLM 网络请求失败: ${(err as Error).message}`);
+    }
     if (!res.ok) {
-      const text = await res.text().catch(() => '');
-      this.logger.error(`LLM 请求失败 ${res.status}: ${text}`);
-      throw new Error(`LLM 请求失败: ${res.status}`);
+      let detail = '';
+      try {
+        const json = await res.json();
+        detail = JSON.stringify(json).slice(0, 500);
+      } catch {
+        detail = await res.text().catch(() => '').then((t) => t.slice(0, 500));
+      }
+      this.logger.error(`LLM 请求失败 ${res.status}: ${detail}`);
+      throw new Error(`LLM 请求失败(${res.status}): ${detail}`);
     }
     return res;
   }

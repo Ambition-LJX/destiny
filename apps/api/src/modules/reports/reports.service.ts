@@ -79,15 +79,22 @@ export class ReportsService {
     chartId: string,
     dimension: ReportDimension,
   ): Promise<string> {
+    this.logger.debug(`generateDimension: chartId=${chartId} dim=${dimension}`);
     const chartRow = await this.loadChart(userId, chartId);
     const chart = chartRow.chartJson as unknown as BaziChart;
 
     const knowledge = this.rag.retrieve(chart, dimension);
+    this.logger.debug(`RAG 召回 ${knowledge.length} 条知识`);
+
     const messages = buildReportMessages(chart, dimension, knowledge);
 
+    this.logger.debug(`调用 LLM chat()...`);
     const raw = await this.llm.chat(messages, { temperature: 0.7 });
+    this.logger.debug(`LLM 返回长度=${raw.length}`);
+
     const finalText = this.filter.process(raw);
     await this.persistReport(chartId, dimension, finalText);
+    this.logger.debug(`维度[${dimension}]落库完成`);
     return finalText;
   }
 
@@ -99,19 +106,24 @@ export class ReportsService {
     chartId: string,
     dimensions?: ReportDimension[],
   ): Promise<{ dimension: ReportDimension; label: string; content: string }[]> {
+    this.logger.debug(`generateAll 开始: userId=${userId} chartId=${chartId}`);
     const dims = dimensions?.length ? dimensions : [...REPORT_DIMENSIONS];
+    this.logger.debug(`generateAll 维度列表: ${dims.join(',')}`);
     const results: { dimension: ReportDimension; label: string; content: string }[] = [];
     for (const d of dims) {
       try {
+        this.logger.debug(`开始生成维度: ${d}`);
         const content = await this.generateDimension(userId, chartId, d);
+        this.logger.debug(`维度[${d}]生成成功，长度=${content.length}`);
         results.push({ dimension: d, label: DIMENSION_LABELS[d], content });
       } catch (err) {
         const dim = DIMENSION_LABELS[d];
-        const cause = err instanceof Error ? err.message : String(err);
+        const cause = err instanceof Error ? `${err.name}: ${err.message}\n${err.stack}` : String(err);
         this.logger.error(`生成维度[${dim}]失败: ${cause}`);
-        throw new Error(`生成「${dim}」时出错: ${cause}`);
+        throw new Error(`生成「${dim}」时出错: ${err instanceof Error ? err.message : String(err)}`);
       }
     }
+    this.logger.debug(`generateAll 完成，共 ${results.length} 个报告`);
     return results;
   }
 
