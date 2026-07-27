@@ -80,8 +80,10 @@ export class OpenAiCompatibleAdapter implements LlmAdapter {
   ): Promise<Response> {
     const url = `${this.baseUrl.replace(/\/$/, '')}/chat/completions`;
     this.logger.debug(`LLM 请求: ${url} stream=${stream}`);
-    let res: Response;
+      let res: Response;
     try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 30_000);
       res = await fetch(url, {
         method: 'POST',
         headers: {
@@ -95,8 +97,14 @@ export class OpenAiCompatibleAdapter implements LlmAdapter {
           max_tokens: options?.maxTokens ?? 2048,
           stream,
         }),
+        signal: controller.signal as any,
       });
+      clearTimeout(timeout);
     } catch (err) {
+      if (err instanceof Error && err.name === 'AbortError') {
+        this.logger.error('LLM 请求超时(30s)');
+        throw new Error('LLM 请求超时，请稍后重试');
+      }
       this.logger.error(`LLM 网络请求异常: ${(err as Error).message}`);
       throw new Error(`LLM 网络请求失败: ${(err as Error).message}`);
     }

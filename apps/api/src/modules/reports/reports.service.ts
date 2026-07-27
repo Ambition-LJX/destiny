@@ -106,23 +106,30 @@ export class ReportsService {
     chartId: string,
     dimensions?: ReportDimension[],
   ): Promise<{ dimension: ReportDimension; label: string; content: string }[]> {
-    this.logger.debug(`generateAll 开始: userId=${userId} chartId=${chartId}`);
     const dims = dimensions?.length ? dimensions : [...REPORT_DIMENSIONS];
-    this.logger.debug(`generateAll 维度列表: ${dims.join(',')}`);
-    const results: { dimension: ReportDimension; label: string; content: string }[] = [];
-    for (const d of dims) {
+    this.logger.debug(`generateAll 开始: userId=${userId} chartId=${chartId}, 维度=${dims.join(',')}`);
+
+    const chartRow = await this.loadChart(userId, chartId);
+    const chart = chartRow.chartJson as unknown as BaziChart;
+
+    const generateOne = async (d: ReportDimension): Promise<{ dimension: ReportDimension; label: string; content: string }> => {
+      const label = DIMENSION_LABELS[d];
       try {
-        this.logger.debug(`开始生成维度: ${d}`);
-        const content = await this.generateDimension(userId, chartId, d);
-        this.logger.debug(`维度[${d}]生成成功，长度=${content.length}`);
-        results.push({ dimension: d, label: DIMENSION_LABELS[d], content });
+        const content = await Promise.race([
+          this.generateDimension(userId, chartId, d),
+          new Promise<string>((_, reject) =>
+            setTimeout(() => reject(new Error(`「${label}」生成超时(60s)`)), 60_000),
+          ),
+        ]);
+        return { dimension: d, label, content };
       } catch (err) {
-        const dim = DIMENSION_LABELS[d];
-        const cause = err instanceof Error ? `${err.name}: ${err.message}\n${err.stack}` : String(err);
-        this.logger.error(`生成维度[${dim}]失败: ${cause}`);
-        throw new Error(`生成「${dim}」时出错: ${err instanceof Error ? err.message : String(err)}`);
+        const cause = err instanceof Error ? err.message : String(err);
+        this.logger.error(`维度[${label}]失败: ${cause}`);
+        throw new Error(`「${label}」生成失败: ${cause}`);
       }
-    }
+    };
+
+    const results = await Promise.all(dims.map(generateOne));
     this.logger.debug(`generateAll 完成，共 ${results.length} 个报告`);
     return results;
   }
