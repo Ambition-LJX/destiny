@@ -1,13 +1,16 @@
 # ============================================================
 #  开发环境（hot-reload，严格端口隔离）
 #  启动：docker compose --env-file .env.docker.dev -f docker-compose.dev.yml up
-# ============================================================
+#
 #  端口策略：
-#   - postgres / redis / api 仅 expose 给内部网络，不映射宿主机
-#   - 仅 web 映射 8080 -> 3000，浏览器通过 ip:8080 访问
-#  网络隔离：
-#   - 使用专属网络 destiny-dev-net，与其他项目互不干扰
+#    - postgres / redis / api 仅 expose 给内部网络，不映射宿主机
+#    - 仅 web 映射 WEB_PORT(默认 8080) -> 3000，浏览器通过 ip:8080 访问
+#  命名隔离：
+#    - 项目级网络：destiny-dev-net
+#    - 项目级数据卷：destiny-dev-pgdata / destiny-dev-redisdata
+#    - 容器名全部以 destiny-dev- 前缀，与其他项目互不冲突
 # ============================================================
+
 services:
   postgres:
     image: postgres:16-alpine
@@ -59,13 +62,18 @@ services:
         condition: service_healthy
     environment:
       NODE_ENV: development
-      PORT: 3001
+      HOSTNAME: "0.0.0.0"
+      PORT: "3001"
       DATABASE_URL: postgresql://${POSTGRES_USER:-destiny}:${POSTGRES_PASSWORD:-destiny_pwd}@postgres:5432/${POSTGRES_DB:-destiny}?schema=public
       REDIS_URL: redis://redis:6379
       JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:-dev-access-secret}
+      JWT_ACCESS_EXPIRES_IN: ${JWT_ACCESS_EXPIRES_IN:-15m}
       JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:-dev-refresh-secret}
+      JWT_REFRESH_EXPIRES_IN: ${JWT_REFRESH_EXPIRES_IN:-7d}
       ENCRYPTION_KEY: ${ENCRYPTION_KEY:-0123456789abcdef0123456789abcdef}
       CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:8080}
+      THROTTLE_TTL: ${THROTTLE_TTL:-60}
+      THROTTLE_LIMIT: ${THROTTLE_LIMIT:-30}
       LLM_PROVIDER: ${LLM_PROVIDER:-mock}
       LLM_API_KEY: ${LLM_API_KEY:-}
       LLM_BASE_URL: ${LLM_BASE_URL:-https://api.openai.com/v1}
@@ -77,7 +85,6 @@ services:
     networks:
       - destiny-dev-net
     volumes:
-      # 挂载源码实现热重载
       - ./packages/bazi-engine/src:/repo/packages/bazi-engine/src
       - ./packages/bazi-engine/package.json:/repo/packages/bazi-engine/package.json
       - ./packages/bazi-engine/tsconfig.json:/repo/packages/bazi-engine/tsconfig.json
@@ -104,19 +111,18 @@ services:
       HOSTNAME: "0.0.0.0"
       PORT: "3000"
       NEXT_PUBLIC_API_BASE: /api
-      # 运行时反代到 api 容器（next dev 启动时读取）
+      # next dev 启动时读取，用于 /api/* 反代到 api 容器
       API_PROXY_TARGET: http://api:3001
       # Next.js / webpack 在 Docker 挂载卷下需启用轮询以检测文件变更
       CHOKIDAR_USEPOLLING: "true"
       WATCHPACK_POLLING: "true"
       NEXT_WEBPACK_USEPOLLING: "true"
     ports:
-      # 唯一对外暴露端口：宿主机 8080 -> 容器 3000
+      # 唯一对外暴露端口：宿主机 WEB_PORT(默认 8080) -> 容器 3000
       - "${WEB_PORT:-8080}:3000"
     networks:
       - destiny-dev-net
     volumes:
-      # 挂载源码和配置
       - ./apps/web/src:/repo/apps/web/src
       - ./apps/web/public:/repo/apps/web/public
       - ./apps/web/package.json:/repo/apps/web/package.json

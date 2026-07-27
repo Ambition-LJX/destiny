@@ -13,6 +13,8 @@ out/
 .env
 .env.local
 .env.*.local
+.env.docker.dev
+.env.docker.prod
 *.pem
 
 # ---- logs ----
