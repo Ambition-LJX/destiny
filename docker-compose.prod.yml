@@ -19,8 +19,18 @@ services:
     # 密码自愈入口:每次启动时,把数据卷里 destiny 用户的密码强制覆盖为
     # 当前 POSTGRES_PASSWORD 环境变量值,防止改了 .env.docker.prod 后
     # 出现 "password authentication failed for user destiny" 死锁。
-    entrypoint: ["/usr/local/bin/postgres-entrypoint.sh"]
-    command: ["postgres"]
+    # 注意:用 `sh -c` 显式调用而不是直接 exec,这样即使宿主机上
+    # docker/postgres-entrypoint.sh 因为 git 不保留 Windows 的 +x 而拉到
+    # ubuntu 后是 644(没有可执行位),sh 也会读取并解释它,不会报
+    # "permission denied"。如果脚本带 +x,sh 会按需直接 exec 它(更快)。
+    entrypoint: ["sh", "-c"]
+    command:
+      - |
+        if [ -x /usr/local/bin/postgres-entrypoint.sh ]; then
+          exec /usr/local/bin/postgres-entrypoint.sh postgres
+        else
+          exec sh /usr/local/bin/postgres-entrypoint.sh postgres
+        fi
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-destiny}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}

@@ -11,10 +11,8 @@ out/
 
 # ---- env & secrets ----
 .env
-.env.local
-.env.*.local
-.env.docker.dev
-.env.docker.prod
+.env.*
+!.env.example
 *.pem
 
 # ---- logs ----
