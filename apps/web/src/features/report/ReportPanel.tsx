@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { streamSse } from '@/lib/api';
+import { reportApi, streamSse } from '@/lib/api';
 import { DIMENSIONS } from '@/lib/elements';
 import type { ReportDimension } from '@/lib/types';
 import { RichText } from './RichText';
@@ -57,8 +57,37 @@ export function ReportPanel({ chartId }: { chartId: string }) {
   }
 
   async function generateAll() {
-    for (const d of DIMENSIONS) {
-      await generate(d.key);
+    setStates((s) => {
+      const next = { ...s };
+      for (const d of DIMENSIONS) {
+        next[d.key] = { content: '', loading: true, done: false };
+      }
+      return next;
+    });
+
+    try {
+      const { disclaimer: dc, reports } = await reportApi.generateAll(chartId);
+      if (dc) setDisclaimer(dc);
+      setStates((s) => {
+        const next = { ...s };
+        for (const item of reports) {
+          next[item.dimension] = {
+            content: item.content,
+            loading: false,
+            done: true,
+          };
+        }
+        return next;
+      });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : '生成失败';
+      setStates((s) => {
+        const next = { ...s };
+        for (const d of DIMENSIONS) {
+          next[d.key] = { ...s[d.key], loading: false, done: true, error: msg };
+        }
+        return next;
+      });
     }
   }
 

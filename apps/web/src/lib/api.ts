@@ -1,6 +1,7 @@
 import type {
   ApiResponse,
   AuthTokens,
+  BatchReportItem,
   ChartResult,
   CreateProfilePayload,
   ProfileView,
@@ -179,6 +180,17 @@ export const chartApi = {
  */
 export const reportApi = {
   list: (chartId: string) => request<StoredReport[]>(`/reports/${chartId}`),
+  /**
+   * 一次性生成全部（或指定）维度的报告。
+   */
+  generateAll: (chartId: string, dimensions?: string[]) => {
+    const body: { chartId: string; dimensions?: string[] } = { chartId };
+    if (dimensions?.length) body.dimensions = dimensions;
+    return request<{ disclaimer: string; reports: BatchReportItem[] }>(
+      '/reports/generate',
+      { method: 'POST', body: JSON.stringify(body) },
+    );
+  },
 };
 
 /**

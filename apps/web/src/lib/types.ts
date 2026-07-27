@@ -148,3 +148,10 @@ export interface StoredReport {
   modelVersion: string;
   createdAt: string;
 }
+
+/** 批量生成报告的单个结果项 */
+export interface BatchReportItem {
+  dimension: ReportDimension;
+  label: string;
+  content: string;
+}
