@@ -102,8 +102,15 @@ export class ReportsService {
     const dims = dimensions?.length ? dimensions : [...REPORT_DIMENSIONS];
     const results: { dimension: ReportDimension; label: string; content: string }[] = [];
     for (const d of dims) {
-      const content = await this.generateDimension(userId, chartId, d);
-      results.push({ dimension: d, label: DIMENSION_LABELS[d], content });
+      try {
+        const content = await this.generateDimension(userId, chartId, d);
+        results.push({ dimension: d, label: DIMENSION_LABELS[d], content });
+      } catch (err) {
+        const dim = DIMENSION_LABELS[d];
+        const cause = err instanceof Error ? err.message : String(err);
+        this.logger.error(`生成维度[${dim}]失败: ${cause}`);
+        throw new Error(`生成「${dim}」时出错: ${cause}`);
+      }
     }
     return results;
   }

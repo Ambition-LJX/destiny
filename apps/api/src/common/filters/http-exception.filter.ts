@@ -37,7 +37,7 @@ export class HttpExceptionFilter implements ExceptionFilter {
       }
     } else if (exception instanceof Error) {
       message = exception.message;
-      this.logger.error(exception.message, exception.stack);
+      this.logger.error(`[${exception.name}] ${exception.message}`, exception.stack);
     }
 
     response.status(status).json({ code, message, data: null });
