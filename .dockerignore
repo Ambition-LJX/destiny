@@ -2,8 +2,6 @@
 **/dist
 **/.next
 **/coverage
-**/.env
-**/.env.*
 !**/.env.example
 .git
 *.log
