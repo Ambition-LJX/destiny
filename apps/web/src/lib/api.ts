@@ -108,7 +108,16 @@ async function request<T>(
     }
   }
 
-  const json = (await res.json()) as ApiResponse<T>;
+  const body = await res.text();
+  let json: ApiResponse<T>;
+  try {
+    json = JSON.parse(body) as ApiResponse<T>;
+  } catch {
+    throw new ApiError(
+      `请求失败(${res.status})：${body.slice(0, 200)}`,
+      res.status,
+    );
+  }
 
   if (!res.ok || json.code !== 0) {
     throw new ApiError(json.message || `请求失败(${res.status})`, res.status);

@@ -5,6 +5,7 @@ import { LLM_ADAPTER, type LlmAdapter } from '../ai/llm/llm.types';
 import { RagService } from '../ai/rag/rag.service';
 import { ContentFilterService } from '../ai/filter/content-filter.service';
 import {
+  DIMENSION_LABELS,
   buildAskMessages,
   buildReportMessages,
   DISCLAIMER,
@@ -102,7 +103,7 @@ export class ReportsService {
     const results: { dimension: ReportDimension; label: string; content: string }[] = [];
     for (const d of dims) {
       const content = await this.generateDimension(userId, chartId, d);
-      results.push({ dimension: d, label: d, content });
+      results.push({ dimension: d, label: DIMENSION_LABELS[d], content });
     }
     return results;
   }
