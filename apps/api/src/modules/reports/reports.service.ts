@@ -11,6 +11,7 @@ import { ContentFilterService } from '../ai/filter/content-filter.service';
 import {
   DIMENSION_LABELS,
   buildAskMessages,
+  buildOverviewMessages,
   buildReportMessages,
   DISCLAIMER,
   REPORT_DIMENSIONS,
@@ -194,6 +195,49 @@ export class ReportsService {
     const results = await Promise.all(dims.map(generateOne));
     this.logger.debug(`generateAll 完成，共 ${results.length} 个报告`);
     return results;
+  }
+
+  /**
+   * 命盘整体通俗解读（流式）。
+   * 比单维度报告更口语化，目标是把专业术语翻译成大白话。
+   */
+  async *generateOverviewStream(
+    userId: string,
+    chartId: string,
+    idempotencyKey?: string,
+  ): AsyncIterable<string> {
+    const key = idempotencyKey ?? `overview:${chartId}`;
+    const cached = this.checkIdempotency(key);
+    if (cached) {
+      const segments = cached.match(/[^。！？\n]+[。！？\n]?/g) ?? [cached];
+      for (const seg of segments) yield seg;
+      return;
+    }
+
+    const chartRow = await this.loadChart(userId, chartId);
+    const chart = chartRow.chartJson as unknown as BaziChart;
+
+    // 概览需要召回更多维度的知识
+    const knowledge = this.rag.retrieve(chart, undefined, 6);
+    const messages = buildOverviewMessages(chart, knowledge);
+
+    const start = Date.now();
+    let full = '';
+    for await (const delta of this.llm.chatStream(messages, {
+      temperature: 0.75,
+      idempotencyKey: key,
+    })) {
+      const softened = this.filter.processChunk(delta);
+      full += softened;
+      yield softened;
+    }
+    this.logger.debug(
+      `命盘概览 流式生成耗时=${Date.now() - start}ms 长度=${full.length}`,
+    );
+
+    const finalText = this.filter.process(full);
+    this.setIdempotency(key, finalText);
+    // 概览不单独落库，只做短期幂等缓存
   }
 
   /**

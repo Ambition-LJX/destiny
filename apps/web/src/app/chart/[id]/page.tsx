@@ -12,6 +12,7 @@ import { PILLAR_POSITION_LABEL } from '@/lib/elements';
 import { PillarsTable } from '@/features/chart/PillarsTable';
 import { FiveElementsChart } from '@/features/chart/FiveElementsChart';
 import { LuckTimeline } from '@/features/chart/LuckTimeline';
+import { OverviewPanel } from '@/features/chart/OverviewPanel';
 import { ReportPanel } from '@/features/report/ReportPanel';
 import { ChatPanel } from '@/features/chat/ChatPanel';
 
@@ -89,6 +90,9 @@ export default function ChartPage() {
               className="mt-6 space-y-6"
               hidden={tab !== 'chart'}
             >
+              {/* 命盘通俗解读 - 大白话翻译 */}
+              <OverviewPanel chartId={chartId} />
+
               <section className="card">
                 <h2 className="mb-4 text-lg font-semibold text-ink-900 dark:text-ink-100">四柱命盘</h2>
                 <PillarsTable chart={result.chart} />

@@ -65,6 +65,34 @@ export class ReportsController {
   }
 
   /**
+   * 流式生成命盘整体通俗解读（SSE）。
+   * 用大白话把命盘的核心特点解释清楚，让不懂术语的用户也能看懂。
+   */
+  @Get('overview')
+  async overview(
+    @CurrentUser() user: AuthUser,
+    @Query('chartId') chartId: string,
+    @Headers('idempotency-key') idempotencyKey: string | undefined,
+    @Res() res: Response,
+  ): Promise<void> {
+    this.initSse(res);
+    try {
+      for await (const chunk of this.reports.generateOverviewStream(
+        user.userId,
+        chartId,
+        idempotencyKey,
+      )) {
+        this.sendSse(res, { delta: chunk });
+      }
+      this.sendSse(res, { done: true, disclaimer: DISCLAIMER });
+    } catch (err) {
+      this.sendSse(res, { error: (err as Error).message });
+    } finally {
+      res.end();
+    }
+  }
+
+  /**
    * 非流式生成全部（或指定）维度报告。
    */
   @Post('generate')

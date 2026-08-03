@@ -227,6 +227,11 @@ export async function streamSse(
   },
   signal?: AbortSignal,
 ): Promise<void> {
+  // 如果调用前已被中断，直接返回
+  if (signal?.aborted) {
+    return;
+  }
+
   const headers = new Headers();
   const access = tokenStore.access;
   if (access) headers.set('Authorization', `Bearer ${access}`);
@@ -237,14 +242,25 @@ export async function streamSse(
     }
   }
 
-  const res = await fetch(`${API_BASE}${path}`, {
-    method: init.method,
-    headers,
-    body: init.body ? JSON.stringify(init.body) : undefined,
-    signal,
-  });
+  let res: Response;
+  try {
+    res = await fetch(`${API_BASE}${path}`, {
+      method: init.method,
+      headers,
+      body: init.body ? JSON.stringify(init.body) : undefined,
+      signal,
+    });
+  } catch (err) {
+    // 处理中断或网络错误
+    if (signal?.aborted || (err instanceof DOMException && err.name === 'AbortError')) {
+      return; // 静默返回，不触发 error 回调
+    }
+    handlers.onError?.(err instanceof Error ? err.message : '网络请求失败');
+    return;
+  }
 
   if (!res.ok || !res.body) {
+    if (signal?.aborted) return;
     handlers.onError?.(`流式请求失败(${res.status})`);
     return;
   }
@@ -253,34 +269,59 @@ export async function streamSse(
   const decoder = new TextDecoder();
   let buffer = '';
 
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    buffer += decoder.decode(value, { stream: true });
-    const lines = buffer.split('\n');
-    buffer = lines.pop() ?? '';
-    for (const line of lines) {
-      const trimmed = line.trim();
-      if (!trimmed.startsWith('data:')) continue;
-      const payload = trimmed.slice(5).trim();
-      if (!payload) continue;
+  try {
+    while (true) {
+      // 检查是否已被中断
+      if (signal?.aborted) {
+        break;
+      }
+
+      let result: { done: boolean; value?: Uint8Array };
       try {
-        const evt = JSON.parse(payload) as {
-          delta?: string;
-          done?: boolean;
-          disclaimer?: string;
-          error?: string;
-        };
-        if (evt.error) {
-          handlers.onError?.(evt.error);
-        } else if (evt.done) {
-          handlers.onDone?.(evt.disclaimer);
-        } else if (evt.delta) {
-          handlers.onDelta(evt.delta);
+        result = await reader.read();
+      } catch (err) {
+        if (signal?.aborted || (err instanceof DOMException && err.name === 'AbortError')) {
+          break;
         }
-      } catch {
-        /* 忽略解析失败的心跳行 */
+        throw err;
+      }
+
+      const { done, value } = result;
+      if (done) break;
+
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop() ?? '';
+
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (!trimmed.startsWith('data:')) continue;
+        const payload = trimmed.slice(5).trim();
+        if (!payload) continue;
+
+        // 再次检查中断
+        if (signal?.aborted) break;
+
+        try {
+          const evt = JSON.parse(payload) as {
+            delta?: string;
+            done?: boolean;
+            disclaimer?: string;
+            error?: string;
+          };
+          if (evt.error) {
+            handlers.onError?.(evt.error);
+          } else if (evt.done) {
+            handlers.onDone?.(evt.disclaimer);
+          } else if (evt.delta) {
+            handlers.onDelta(evt.delta);
+          }
+        } catch {
+          /* 忽略解析失败的心跳行 */
+        }
       }
     }
+  } finally {
+    reader.releaseLock?.();
   }
 }
