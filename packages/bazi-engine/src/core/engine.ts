@@ -26,7 +26,7 @@ import { Solar } from 'lunar-javascript';
 import type { HeavenlyStem } from '../constants/ganzhi.js';
 
 /** 引擎版本，用于结果复现与回归。 */
-export const ENGINE_VERSION = '1.1.0';
+export const ENGINE_VERSION = '1.2.0';
 
 /**
  * 排盘主入口：纯函数，无 I/O，确定性可复现。

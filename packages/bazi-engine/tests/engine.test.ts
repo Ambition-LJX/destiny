@@ -27,7 +27,7 @@ describe('calculateBazi 端到端', () => {
     expect(chart.pillars.day.earthlyBranch).toBe('辰');
     expect(chart.pillars.day.tenGod).toBe('日主');
     expect(chart.zodiac).toBe('马');
-    expect(chart.engineVersion).toBe('1.1.0');
+    expect(chart.engineVersion).toBe('1.2.0');
   });
 
   it('结果可复现（相同输入 → 相同输出）', () => {

@@ -115,6 +115,9 @@ export class ChartsService {
 
   /**
    * 读取已保存的排盘（含权限校验）。
+   *
+   * 懒迁移：若数据库中的命盘是旧引擎版本（日柱 twelveStage 缺失），
+   * 自动用最新引擎重新计算并更新数据库，确保线上旧数据也能修复。
    */
   async getChart(userId: string, chartId: string): Promise<ChartResult> {
     const chart = await this.prisma.chart.findUnique({
@@ -124,10 +127,56 @@ export class ChartsService {
     if (!chart || chart.profile.userId !== userId || chart.profile.deletedAt) {
       throw new Error('排盘结果不存在或无权访问');
     }
+
+    const baziChart = chart.chartJson as unknown as BaziChart;
+
+    // 懒迁移：旧引擎版本或日柱 twelveStage 缺失时，重新计算
+    if (
+      chart.engineVersion !== ENGINE_VERSION ||
+      !baziChart.pillars?.day?.twelveStage
+    ) {
+      try {
+        const birth = this.profiles.decryptBirth(chart.profile.birthDatetimeEnc);
+        const input = this.toBirthInput(
+          birth,
+          chart.profile.gender as 'male' | 'female',
+          chart.profile.longitude,
+          chart.profile.latitude,
+          chart.profile.useTrueSolarTime,
+        );
+        const recalculated = calculateBazi(input);
+        const newInputHash = this.crypto.hash(`${ENGINE_VERSION}:${JSON.stringify(input)}`);
+
+        await this.prisma.chart.update({
+          where: { id: chartId },
+          data: {
+            engineVersion: ENGINE_VERSION,
+            chartJson: recalculated as unknown as object,
+            inputHash: newInputHash,
+          },
+        });
+
+        // 同步更新 Redis 缓存
+        const cacheKey = `chart:${newInputHash}`;
+        await this.redis.set(cacheKey, JSON.stringify(recalculated), ChartsService.CACHE_TTL);
+
+        this.logger.log(`命盘 ${chartId} 已从 ${chart.engineVersion} 懒迁移至 ${ENGINE_VERSION}`);
+
+        return {
+          chartId: chart.id,
+          engineVersion: ENGINE_VERSION,
+          chart: recalculated,
+          cached: true,
+        };
+      } catch (err) {
+        this.logger.warn(`命盘 ${chartId} 懒迁移失败，返回旧数据: ${err instanceof Error ? err.message : err}`);
+      }
+    }
+
     return {
       chartId: chart.id,
       engineVersion: chart.engineVersion,
-      chart: chart.chartJson as unknown as BaziChart,
+      chart: baziChart,
       cached: true,
     };
   }
