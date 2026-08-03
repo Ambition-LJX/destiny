@@ -6,11 +6,13 @@
 
 ## 环境变量文件
 
-| 文件 | 用途 |
-|---|---|
-| `.env.example` | 参考模板，不参与运行 |
-| `.env.docker.dev` | 开发环境变量 |
+
+| 文件                 | 用途                                     |
+| ------------------ | -------------------------------------- |
+| `.env.example`     | 参考模板，不参与运行                             |
+| `.env.docker.dev`  | 开发环境变量                                 |
 | `.env.docker.prod` | 生产环境变量（部署前必须替换全部 `replace-with-*` 占位符） |
+
 
 生成强密钥：`openssl rand -hex 32`
 
@@ -88,6 +90,8 @@ docker compose --env-file .env.docker.prod -f docker-compose.prod.yml down -v
 docker volume rm destiny-prod-pgdata destiny-prod-redisdata
 docker compose --env-file .env.docker.prod -f docker-compose.prod.yml up -d --build
 ```
+
+
 
 ### `Failed to find Server Action "x"`
 

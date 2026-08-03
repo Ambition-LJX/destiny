@@ -99,6 +99,22 @@ export function PillarsTable({ chart }: { chart: BaziChart }) {
               </Cell>
             ))}
           </Row>
+
+          <Row label="十二长生">
+            {cols.map((c) => (
+              <Cell key={c.key}>
+                {c.pillar ? (
+                  c.pillar.twelveStage ? (
+                    <span className="text-xs text-fire">{c.pillar.twelveStage}</span>
+                  ) : (
+                    <span className="text-xs text-ink-300">—（日柱）</span>
+                  )
+                ) : (
+                  <Unknown />
+                )}
+              </Cell>
+            ))}
+          </Row>
         </tbody>
       </table>
     </div>
@@ -122,7 +138,7 @@ function StemBadge({ char }: { char: string }) {
   const el = STEM_ELEMENT[char];
   return (
     <span
-      className="inline-flex h-10 w-10 items-center justify-center rounded-lg text-xl font-semibold font-serif"
+      className="inline-flex h-10 w-10 items-center justify-center rounded-lg text-xl font-serif"
       style={{ color: ELEMENT_COLORS[el], background: ELEMENT_BG[el] }}
     >
       {char}
@@ -133,7 +149,7 @@ function StemBadge({ char }: { char: string }) {
 function BranchBadge({ char, element }: { char: string; element: keyof typeof ELEMENT_COLORS }) {
   return (
     <span
-      className="inline-flex h-10 w-10 items-center justify-center rounded-lg text-xl font-semibold font-serif"
+      className="inline-flex h-10 w-10 items-center justify-center rounded-lg text-xl font-serif"
       style={{ color: ELEMENT_COLORS[element], background: ELEMENT_BG[element] }}
     >
       {char}

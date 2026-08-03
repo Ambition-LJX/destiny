@@ -9,7 +9,7 @@ import {
 } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
-import type { AuthUser } from '../auth/strategies/jwt.strategy';
+import type { AuthUser } from '../../common/dto/auth.types';
 import { ProfilesService } from './profiles.service';
 import { CreateProfileDto } from './dto/profile.dto';
 

@@ -2,6 +2,7 @@ import {
   Body,
   Controller,
   Get,
+  Headers,
   Param,
   Post,
   Query,
@@ -11,7 +12,7 @@ import {
 import type { Response } from 'express';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
-import type { AuthUser } from '../auth/strategies/jwt.strategy';
+import type { AuthUser } from '../../common/dto/auth.types';
 import { ReportsService } from './reports.service';
 import { AskDto, GenerateReportDto } from './dto/report.dto';
 import {
@@ -41,6 +42,7 @@ export class ReportsController {
     @CurrentUser() user: AuthUser,
     @Query('chartId') chartId: string,
     @Query('dimension') dimension: ReportDimension,
+    @Headers('idempotency-key') idempotencyKey: string | undefined,
     @Res() res: Response,
   ): Promise<void> {
     this.initSse(res);
@@ -50,6 +52,7 @@ export class ReportsController {
         user.userId,
         chartId,
         dim,
+        idempotencyKey,
       )) {
         this.sendSse(res, { delta: chunk });
       }
@@ -74,7 +77,22 @@ export class ReportsController {
       dto.chartId,
       dto.dimensions,
     );
-    return { disclaimer: DISCLAIMER, reports: items };
+    const hitCount = items.filter((i) => i.cached).length;
+    return {
+      disclaimer: DISCLAIMER,
+      llmMeta: {
+        provider: this.reports.providerAndModel().provider,
+        model: this.reports.providerAndModel().model,
+        cacheHits: hitCount,
+        total: items.length,
+      },
+      reports: items.map((i) => ({
+        dimension: i.dimension,
+        label: i.label,
+        content: i.content,
+        cached: i.cached,
+      })),
+    };
   }
 
   /**

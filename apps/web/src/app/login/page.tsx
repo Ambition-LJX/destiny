@@ -46,15 +46,33 @@ function LoginInner() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center px-4">
-      <div className="card w-full max-w-md">
-        <Link href="/" className="mb-6 inline-flex items-center gap-2 font-serif text-lg font-semibold">
-          <span className="text-xl">🔮</span> 玄机 · 八字命术
+    <div className="relative flex min-h-screen items-center justify-center overflow-hidden px-4">
+      {/* 五行光晕装饰 */}
+      <div className="pointer-events-none absolute -left-24 -top-24 h-72 w-72 rounded-full bg-wood/20 blur-3xl" />
+      <div className="pointer-events-none absolute -right-24 -top-10 h-64 w-64 rounded-full bg-fire/15 blur-3xl" />
+      <div className="pointer-events-none absolute -bottom-24 left-1/3 h-72 w-72 rounded-full bg-water/15 blur-3xl" />
+
+      <div className="card relative w-full max-w-md">
+        <Link
+          href="/"
+          className="mb-6 inline-flex items-center gap-2 font-serif text-lg font-semibold text-ink-900 dark:text-ink-100"
+        >
+          <svg viewBox="0 0 40 40" className="h-7 w-7 text-wood">
+            <circle cx="20" cy="20" r="18" fill="none" stroke="currentColor" strokeWidth="1.5" opacity="0.6" />
+            <path
+              d="M20 2 A18 18 0 0 1 20 38 A9 9 0 0 1 20 20 A9 9 0 0 0 20 2"
+              fill="currentColor"
+              opacity="0.8"
+            />
+            <circle cx="20" cy="11" r="3" fill="#C8952F" />
+            <circle cx="20" cy="29" r="3" fill="currentColor" opacity="0.4" />
+          </svg>
+          玄机 · 八字命术
         </Link>
-        <h1 className="text-2xl font-semibold text-ink-900">
+        <h1 className="text-2xl font-semibold text-ink-900 dark:text-ink-100">
           {isRegister ? '创建账户' : '欢迎回来'}
         </h1>
-        <p className="mt-1 text-sm text-ink-500">
+        <p className="mt-1 text-sm text-ink-500 dark:text-ink-400">
           {isRegister ? '注册以保存你的命盘档案' : '登录以查看你的命盘与解读'}
         </p>
 
@@ -90,10 +108,10 @@ function LoginInner() {
           </button>
         </form>
 
-        <p className="mt-4 text-center text-sm text-ink-500">
+        <p className="mt-4 text-center text-sm text-ink-500 dark:text-ink-400">
           {isRegister ? '已有账户？' : '还没有账户？'}
           <button
-            className="ml-1 font-medium text-ink-900 hover:underline"
+            className="ml-1 font-medium text-wood hover:underline"
             onClick={() => {
               setIsRegister(!isRegister);
               setError('');

@@ -2,7 +2,13 @@ import type {
   ChatMessage,
   ChatOptions,
   LlmAdapter,
+  LlmUsage,
 } from './llm.types';
+
+/** 估算中文文本的 token 数（粗略：1 字 ≈ 1.5 token） */
+function estimateTokens(text: string): number {
+  return Math.ceil(text.length * 1.5);
+}
 
 /**
  * 离线 Mock 适配器。
@@ -16,8 +22,21 @@ export class MockAdapter implements LlmAdapter {
   readonly model = 'mock-explainer';
   readonly configured = true;
 
-  async chat(messages: ChatMessage[], _options?: ChatOptions): Promise<string> {
-    return this.compose(messages);
+  async chat(
+    messages: ChatMessage[],
+    _options?: ChatOptions,
+  ): Promise<{ content: string; usage?: LlmUsage }> {
+    const content = this.compose(messages);
+    const promptTokens = messages.reduce(
+      (sum, m) => sum + estimateTokens(m.content),
+      0,
+    );
+    const usage: LlmUsage = {
+      promptTokens,
+      completionTokens: estimateTokens(content),
+      totalTokens: promptTokens + estimateTokens(content),
+    };
+    return { content, usage };
   }
 
   async *chatStream(
@@ -25,7 +44,6 @@ export class MockAdapter implements LlmAdapter {
     _options?: ChatOptions,
   ): AsyncIterable<string> {
     const text = this.compose(messages);
-    // 按句切分模拟流式输出
     const segments = text.match(/[^。！？\n]+[。！？\n]?/g) ?? [text];
     for (const seg of segments) {
       yield seg;
@@ -37,7 +55,6 @@ export class MockAdapter implements LlmAdapter {
     const userMsg = [...messages].reverse().find((m) => m.role === 'user');
     const content = userMsg?.content ?? '';
 
-    // 从 prompt 中粗略提取维度名
     const dimMatch = content.match(/解读维度[:：]\s*(\S+)/);
     const dimension = dimMatch?.[1] ?? '综合';
 

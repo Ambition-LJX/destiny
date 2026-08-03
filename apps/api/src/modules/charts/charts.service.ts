@@ -26,6 +26,12 @@ export class ChartsService {
   private readonly logger = new Logger(ChartsService.name);
   private static readonly CACHE_TTL = 60 * 60 * 24 * 7; // 7 天
 
+  /** 正在进行的排盘任务（同 profileId+inputHash 合并并发） */
+  private readonly inflight = new Map<
+    string,
+    Promise<ChartResult>
+  >();
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly crypto: CryptoService,
@@ -35,6 +41,9 @@ export class ChartsService {
 
   /**
    * 为指定档案排盘。
+   *
+   * 幂等策略：同一 (profileId, inputHash) 并发请求会合并到同一个 Promise，
+   * 避免重复落库；用户重复点击"重新生成"不会重复创建 chart 行。
    */
   async calculate(userId: string, profileId: string): Promise<ChartResult> {
     const profile = await this.profiles.getOwnedOrThrow(userId, profileId);
@@ -48,7 +57,27 @@ export class ChartsService {
       profile.useTrueSolarTime,
     );
     const inputHash = this.crypto.hash(`${ENGINE_VERSION}:${JSON.stringify(input)}`);
+    const inflightKey = `${profileId}:${inputHash}`;
+    const existing = this.inflight.get(inflightKey);
+    if (existing) {
+      this.logger.debug(`合并并发请求: ${inflightKey}`);
+      return existing;
+    }
 
+    const task = this.runCalculate(profileId, inputHash, input);
+    this.inflight.set(inflightKey, task);
+    try {
+      return await task;
+    } finally {
+      this.inflight.delete(inflightKey);
+    }
+  }
+
+  private async runCalculate(
+    profileId: string,
+    inputHash: string,
+    input: BirthInput,
+  ): Promise<ChartResult> {
     // Redis 缓存
     const cacheKey = `chart:${inputHash}`;
     const cachedRaw = await this.redis.get(cacheKey);
@@ -69,7 +98,7 @@ export class ChartsService {
       return { chartId: existing.id, engineVersion: existing.engineVersion, chart, cached: true };
     }
 
-    // 实际排盘
+    // 实际排盘（纯函数调用，最多 1 次）
     const chart = calculateBazi(input);
     const saved = await this.prisma.chart.create({
       data: {

@@ -3,6 +3,7 @@ import type {
   ChatMessage,
   ChatOptions,
   LlmAdapter,
+  LlmUsage,
 } from './llm.types';
 
 /**
@@ -26,12 +27,17 @@ export class OpenAiCompatibleAdapter implements LlmAdapter {
     return this.apiKey.length > 0;
   }
 
-  async chat(messages: ChatMessage[], options?: ChatOptions): Promise<string> {
+  async chat(
+    messages: ChatMessage[],
+    options?: ChatOptions,
+  ): Promise<{ content: string; usage?: LlmUsage }> {
     const res = await this.request(messages, options, false);
     const json = (await res.json()) as {
       choices: { message: { content: string } }[];
+      usage?: LlmUsage;
     };
-    return json.choices?.[0]?.message?.content ?? '';
+    const content = json.choices?.[0]?.message?.content ?? '';
+    return { content, usage: json.usage };
   }
 
   async *chatStream(
@@ -80,7 +86,7 @@ export class OpenAiCompatibleAdapter implements LlmAdapter {
   ): Promise<Response> {
     const url = `${this.baseUrl.replace(/\/$/, '')}/chat/completions`;
     this.logger.debug(`LLM 请求: ${url} stream=${stream}`);
-      let res: Response;
+    let res: Response;
     try {
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), 30_000);
@@ -89,6 +95,9 @@ export class OpenAiCompatibleAdapter implements LlmAdapter {
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${this.apiKey}`,
+          ...(options?.idempotencyKey
+            ? { 'Idempotency-Key': options.idempotencyKey }
+            : {}),
         },
         body: JSON.stringify({
           model: this.model,

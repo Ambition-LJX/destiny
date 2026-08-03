@@ -286,3 +286,115 @@ export const HOUR_BRANCH_RANGES: { branch: EarthlyBranch; start: number; end: nu
   { branch: '戌', start: 19, end: 21 },
   { branch: '亥', start: 21, end: 23 },
 ];
+
+/**
+ * 阳干顺行、阴干逆行；起始支位因日干而异。
+ * 数据来源：传统命理常见口径（阳干长生在亥/寅/寅/巳/申）。
+ * 阴干逆行「长生」与同五行阳干同位（乙/丁/己/辛/癸 → 午/酉/午/寅/卯）。
+ */
+type TwelveStage =
+  | '长生'
+  | '沐浴'
+  | '冠带'
+  | '临官'
+  | '帝旺'
+  | '衰'
+  | '病'
+  | '死'
+  | '墓'
+  | '绝'
+  | '胎'
+  | '养';
+
+const STAGES_ORDER: TwelveStage[] = [
+  '长生',
+  '沐浴',
+  '冠带',
+  '临官',
+  '帝旺',
+  '衰',
+  '病',
+  '死',
+  '墓',
+  '绝',
+  '胎',
+  '养',
+];
+
+/**
+ * 阳干在子位起始、阴干在午位起始的偏移量；每个日干对应一个起始支索引（长生位）。
+ * 业内通用：甲/丙/戊/庚/壬 长生在亥/寅/寅/巳/申；
+ * 乙/丁/己/辛/癸 长生在午/酉/酉/寅/卯（与阳干同五行阴干逆行即"长生起步支"）。
+ */
+const STEM_LONG_LIFE_BRANCH_INDEX: Record<HeavenlyStem, number> = {
+  // 子=0, 丑=1, 寅=2, ..., 亥=11
+  甲: 11, // 亥
+  乙: 6,  // 午
+  丙: 2,  // 寅
+  丁: 9,  // 酉
+  戊: 2,  // 寅（与丙同）
+  己: 9,  // 酉（与丁同）
+  庚: 5,  // 巳
+  辛: 2,  // 寅
+  壬: 8,  // 申
+  癸: 3,  // 卯
+};
+
+const BRANCH_INDEX: Record<EarthlyBranch, number> = {
+  子: 0,
+  丑: 1,
+  寅: 2,
+  卯: 3,
+  辰: 4,
+  巳: 5,
+  午: 6,
+  未: 7,
+  申: 8,
+  酉: 9,
+  戌: 10,
+  亥: 11,
+};
+
+/**
+ * 计算某柱地支相对日干的十二长生。
+ *
+ * 阳干顺数（支位 +1），阴干逆数（支位 -1）。返回该柱所在长生阶段。
+ */
+export function twelveStageOf(
+  dayMaster: HeavenlyStem,
+  branch: EarthlyBranch,
+): TwelveStage {
+  const start = STEM_LONG_LIFE_BRANCH_INDEX[dayMaster];
+  const target = BRANCH_INDEX[branch];
+  const yang =
+    dayMaster === '甲' ||
+    dayMaster === '丙' ||
+    dayMaster === '戊' ||
+    dayMaster === '庚' ||
+    dayMaster === '壬';
+  // 阳干顺数，阴干逆数
+  const rawOffset = yang
+    ? (target - start + 12) % 12
+    : (start - target + 12) % 12;
+  return STAGES_ORDER[rawOffset];
+}
+
+/**
+ * 纳音 → 五行映射。
+ * 来源：传统命理口径，把纳音名称尾字映射到五行。
+ */
+const NAYIN_ELEMENT_MAP: Record<string, Element> = {
+  金: '金',
+  木: '木',
+  水: '水',
+  火: '火',
+  土: '土',
+};
+
+/** 从纳音字符串（如"海中金"）推导五行。 */
+export function naYinElement(naYin: string): Element {
+  if (!naYin) return '土';
+  // 取最后一个字
+  const lastChar = naYin[naYin.length - 1];
+  return NAYIN_ELEMENT_MAP[lastChar] ?? '土';
+}

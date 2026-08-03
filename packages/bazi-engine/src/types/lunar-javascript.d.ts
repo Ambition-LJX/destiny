@@ -18,6 +18,8 @@ declare module 'lunar-javascript' {
     getDay(): number;
     getHour(): number;
     getMinute(): number;
+    /** UTC 毫秒数（getTime 为 JS 标准方法） */
+    getTime(): number;
     getLunar(): Lunar;
   }
 
@@ -35,10 +37,28 @@ declare module 'lunar-javascript' {
     getMonth(): number;
     getDay(): number;
     getYearShengXiao(): string;
+    getYearShengXiaoExact(): string;
     getYearGanByLiChun(): string;
     getYearZhiByLiChun(): string;
     getJieQiTable(): Record<string, Solar>;
     getEightChar(): EightChar;
+
+    // 节气查询（lunar-javascript 1.7+）
+    getNextJie(wholeDay?: boolean): JieQi;
+    getPrevJie(wholeDay?: boolean): JieQi;
+    getNextQi(wholeDay?: boolean): JieQi;
+    getPrevQi(wholeDay?: boolean): JieQi;
+    getNextJieQi(wholeDay?: boolean): JieQi;
+    getPrevJieQi(wholeDay?: boolean): JieQi;
+    getCurrentJie(): JieQi | null;
+    getCurrentQi(): JieQi | null;
+    getCurrentJieQi(): JieQi | null;
+
+    // 旬空
+    getDayXunKong(): string;
+    getYearXunKong(): string;
+    getMonthXunKong(): string;
+    getTimeXunKong(): string;
   }
 
   export class EightChar {
@@ -50,5 +70,14 @@ declare module 'lunar-javascript' {
     getDayZhi(): string;
     getTimeGan(): string;
     getTimeZhi(): string;
+    getMingGong(): string;
+    getTaiYuan(): string;
+    getTaiXi(): string;
+  }
+
+  /** 节气对象：name + 对应的 Solar */
+  export class JieQi {
+    getName(): string;
+    getSolar(): Solar;
   }
 }

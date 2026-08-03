@@ -1,4 +1,10 @@
-import type { BirthInput, BaziChart } from '../types/chart.js';
+import type {
+  BaziChart,
+  BirthInput,
+  FiveElementsResult,
+  Pattern,
+  ShenshaItem,
+} from '../types/chart.js';
 import { validateBirthInput } from './validate.js';
 import {
   normalizeToSolar,
@@ -10,19 +16,20 @@ import { computeFiveElements } from './fiveElements.js';
 import {
   computeLuckStart,
   computeLuckCycles,
+  computeLuckTransitions,
   computeYearFortune,
 } from './luck.js';
 import { computeShensha } from './shensha.js';
+import { computeRelationships } from './relationships.js';
+import { computePatterns } from './patterns.js';
+import { Solar } from 'lunar-javascript';
 import type { HeavenlyStem } from '../constants/ganzhi.js';
 
 /** 引擎版本，用于结果复现与回归。 */
-export const ENGINE_VERSION = '1.0.0';
+export const ENGINE_VERSION = '1.1.0';
 
 /**
  * 排盘主入口：纯函数，无 I/O，确定性可复现。
- *
- * @param input 出生信息
- * @param referenceYear 用于计算"当前流年"的参考公历年份，默认取当前年
  */
 export function calculateBazi(
   input: BirthInput,
@@ -49,20 +56,79 @@ export function calculateBazi(
     hour: hourPillar,
   };
 
-  const fiveElements = computeFiveElements(pillars);
+  const fiveElements: FiveElementsResult = computeFiveElements(pillars);
 
-  const luckStart = computeLuckStart(normalized, raw.yearStem as HeavenlyStem, input.gender);
+  const luckStart = computeLuckStart(
+    normalized,
+    raw.yearStem as HeavenlyStem,
+    input.gender,
+  );
   const luckCycles = computeLuckCycles(
     raw.monthStem,
     raw.monthBranch,
     dayMaster,
     luckStart,
   );
+  const luckTransitions = computeLuckTransitions(luckCycles);
 
-  const currentYear = computeYearFortune(referenceYear, normalized.year, dayMaster);
+  const currentYear = computeYearFortune(
+    referenceYear,
+    normalized.year,
+    dayMaster,
+  );
 
-  const shensha = computeShensha(raw);
-  const zodiac = computeZodiac(normalized);
+  // 神煞（带出处）
+  const rawShensha = computeShensha(raw, dayMaster);
+  const shenshaDetail: ShenshaItem[] = rawShensha.map((s) => ({
+    name: s.name,
+    position: s.position,
+    source: s.source,
+  }));
+  const shensha = Array.from(new Set(shenshaDetail.map((s) => s.name)));
+
+  // 合冲关系
+  const relationships = computeRelationships(
+    yearPillar,
+    monthPillar,
+    dayPillar,
+    hourPillar,
+  );
+
+  // 命局格局
+  const patterns: Pattern[] = computePatterns(
+    pillars,
+    dayMaster,
+    fiveElements.dayMasterStrength,
+    fiveElements.favorable,
+  );
+
+  // 日柱旬空 + 命宫（来自 lunar-javascript）
+  let dayXunKong: string[] = [];
+  let mingGong: string | undefined;
+  try {
+    const solarForLunar = Solar.fromYmdHms(
+      normalized.year,
+      normalized.month,
+      normalized.day,
+      normalized.hour,
+      normalized.minute,
+      0,
+    );
+    const lunar = solarForLunar.getLunar();
+    const xk = lunar.getDayXunKong?.();
+    if (xk) {
+      dayXunKong = xk
+        .split('')
+        .filter((c: string) => /[子丑寅卯辰巳午未申酉戌亥]/.test(c));
+    }
+    const ec = lunar.getEightChar?.();
+    if (ec) {
+      const mg = ec.getMingGong?.();
+      if (mg) mingGong = mg;
+    }
+  } catch {
+    // 旬空/命宫查不到不影响主结果
+  }
 
   const solarDatetime = new Date(
     Date.UTC(
@@ -80,9 +146,15 @@ export function calculateBazi(
     fiveElements,
     luckStart,
     luckCycles,
+    luckTransitions,
     currentYear,
     shensha,
-    zodiac,
+    shenshaDetail,
+    relationships,
+    patterns,
+    dayXunKong,
+    mingGong,
+    zodiac: computeZodiac(normalized),
     meta: {
       trueSolarTimeApplied: normalized.trueSolarTimeApplied,
       hourKnown: normalized.hourKnown,

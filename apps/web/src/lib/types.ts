@@ -13,6 +13,52 @@ export interface ApiResponse<T> {
   data: T;
 }
 
+export type TwelveStage =
+  | '长生'
+  | '沐浴'
+  | '冠带'
+  | '临官'
+  | '帝旺'
+  | '衰'
+  | '病'
+  | '死'
+  | '墓'
+  | '绝'
+  | '胎'
+  | '养';
+
+export type RelationshipKind =
+  | '天干合'
+  | '天干冲'
+  | '地支六合'
+  | '地支六冲'
+  | '地支三合'
+  | '地支三会'
+  | '地支六害'
+  | '地支三刑'
+  | '地支破';
+
+export interface Relationship {
+  kind: RelationshipKind;
+  positions: ('year' | 'month' | 'day' | 'hour')[];
+  chars: string[];
+  transformed?: string;
+  note?: string;
+}
+
+export interface ShenshaItem {
+  name: string;
+  position: 'year' | 'month' | 'day' | 'hour';
+  source: string;
+}
+
+export interface Pattern {
+  code: string;
+  name: string;
+  description: string;
+  pillars: ('year' | 'month' | 'day' | 'hour')[];
+}
+
 export interface Pillar {
   heavenlyStem: string;
   earthlyBranch: string;
@@ -20,8 +66,10 @@ export interface Pillar {
   tenGod: string;
   hiddenStemTenGods: string[];
   naYin: string;
+  naYinElement: Element;
   element: Element;
   branchElement: Element;
+  twelveStage?: TwelveStage;
 }
 
 export interface FiveElementsResult {
@@ -32,6 +80,8 @@ export interface FiveElementsResult {
   dayMasterScore: number;
   favorable: Element[];
   unfavorable: Element[];
+  rankByScore: Element[];
+  missingElements: Element[];
 }
 
 export interface LuckCycle {
@@ -74,6 +124,11 @@ export interface BaziChart {
   luckCycles: LuckCycle[];
   currentYear: YearFortune;
   shensha: string[];
+  shenshaDetail: ShenshaItem[];
+  relationships: Relationship[];
+  patterns: Pattern[];
+  dayXunKong: string[];
+  mingGong?: string;
   zodiac: string;
   meta: {
     trueSolarTimeApplied: boolean;
@@ -154,4 +209,5 @@ export interface BatchReportItem {
   dimension: ReportDimension;
   label: string;
   content: string;
+  cached?: boolean;
 }

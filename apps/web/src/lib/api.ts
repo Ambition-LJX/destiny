@@ -187,6 +187,12 @@ export const chartApi = {
 /**
  * 报告接口（非流式聚合 + 历史）。
  */
+export interface BatchGenerateResponse {
+  disclaimer: string;
+  reports: BatchReportItem[];
+  llmMeta?: { provider: string; model: string; cacheHits: number; total: number };
+}
+
 export const reportApi = {
   list: (chartId: string) => request<StoredReport[]>(`/reports/${chartId}`),
   /**
@@ -195,10 +201,10 @@ export const reportApi = {
   generateAll: (chartId: string, dimensions?: string[]) => {
     const body: { chartId: string; dimensions?: string[] } = { chartId };
     if (dimensions?.length) body.dimensions = dimensions;
-    return request<{ disclaimer: string; reports: BatchReportItem[] }>(
-      '/reports/generate',
-      { method: 'POST', body: JSON.stringify(body) },
-    );
+    return request<BatchGenerateResponse>('/reports/generate', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    });
   },
 };
 
@@ -213,7 +219,7 @@ export const reportApi = {
  */
 export async function streamSse(
   path: string,
-  init: { method: 'GET' | 'POST'; body?: unknown },
+  init: { method: 'GET' | 'POST'; body?: unknown; headers?: Record<string, string> },
   handlers: {
     onDelta: (text: string) => void;
     onDone?: (disclaimer?: string) => void;
@@ -225,6 +231,11 @@ export async function streamSse(
   const access = tokenStore.access;
   if (access) headers.set('Authorization', `Bearer ${access}`);
   if (init.body) headers.set('Content-Type', 'application/json');
+  if (init.headers) {
+    for (const [k, v] of Object.entries(init.headers)) {
+      headers.set(k, v);
+    }
+  }
 
   const res = await fetch(`${API_BASE}${path}`, {
     method: init.method,

@@ -91,7 +91,9 @@ export default function DashboardPage() {
       <NavBar />
       <main className="mx-auto max-w-3xl px-4 py-10">
         <div className="flex items-center justify-between">
-          <h1 className="font-serif text-2xl font-bold text-ink-900">我的命盘</h1>
+          <h1 className="font-serif text-2xl font-bold text-ink-900 dark:text-ink-100">
+            我的命盘
+          </h1>
           <div className="flex gap-2">
             <button className="btn-ghost" onClick={exportAll}>
               导出全部数据
@@ -108,49 +110,59 @@ export default function DashboardPage() {
           <p className="py-16 text-center text-ink-400">加载中…</p>
         ) : profiles.length === 0 ? (
           <div className="card mt-6 text-center">
-            <p className="text-ink-500">还没有命盘档案。</p>
+            <p className="text-ink-500 dark:text-ink-400">还没有命盘档案。</p>
             <Link href="/new" className="btn-primary mt-4">
               立即创建
             </Link>
           </div>
         ) : (
           <div className="mt-6 space-y-3">
-            {profiles.map((p) => (
-              <div
-                key={p.id}
-                className="card flex items-center justify-between gap-4 py-4"
-              >
-                <div>
-                  <div className="flex items-center gap-2">
-                    <span className="font-medium text-ink-900">{p.name}</span>
-                    <span className="rounded-full bg-ink-100 px-2 py-0.5 text-xs text-ink-500">
-                      {p.gender === 'male' ? '男' : '女'}
-                    </span>
+            {profiles.map((p, i) => {
+              const accentBorders = [
+                'border-l-wood',
+                'border-l-fire',
+                'border-l-earth',
+                'border-l-metal',
+                'border-l-water',
+              ];
+              const accent = accentBorders[i % accentBorders.length];
+              return (
+                <div
+                  key={p.id}
+                  className={`card flex items-center justify-between gap-4 border-l-4 py-4 ${accent}`}
+                >
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="font-medium text-ink-900 dark:text-ink-100">{p.name}</span>
+                      <span className="rounded-full bg-ink-100 px-2 py-0.5 text-xs text-ink-500 dark:bg-ink-800 dark:text-ink-400">
+                        {p.gender === 'male' ? '男' : '女'}
+                      </span>
+                    </div>
+                    <p className="mt-1 text-sm text-ink-500 dark:text-ink-400">
+                      {p.calendar === 'solar' ? '公历' : '农历'} {p.year}-{p.month}-
+                      {p.day}
+                      {p.hourKnown ? ` ${p.hour}:${String(p.minute).padStart(2, '0')}` : ' 时辰未知'}
+                    </p>
                   </div>
-                  <p className="mt-1 text-sm text-ink-500">
-                    {p.calendar === 'solar' ? '公历' : '农历'} {p.year}-{p.month}-
-                    {p.day}
-                    {p.hourKnown ? ` ${p.hour}:${String(p.minute).padStart(2, '0')}` : ' 时辰未知'}
-                  </p>
+                  <div className="flex shrink-0 gap-2">
+                    <button
+                      className="btn-primary"
+                      onClick={() => openChart(p.id)}
+                      disabled={busyId === p.id}
+                    >
+                      {busyId === p.id ? '处理中…' : '查看命盘'}
+                    </button>
+                    <button
+                      className="btn-ghost text-fire"
+                      onClick={() => remove(p.id)}
+                      disabled={busyId === p.id}
+                    >
+                      删除
+                    </button>
+                  </div>
                 </div>
-                <div className="flex shrink-0 gap-2">
-                  <button
-                    className="btn-primary"
-                    onClick={() => openChart(p.id)}
-                    disabled={busyId === p.id}
-                  >
-                    {busyId === p.id ? '处理中…' : '查看命盘'}
-                  </button>
-                  <button
-                    className="btn-ghost text-fire"
-                    onClick={() => remove(p.id)}
-                    disabled={busyId === p.id}
-                  >
-                    删除
-                  </button>
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </main>

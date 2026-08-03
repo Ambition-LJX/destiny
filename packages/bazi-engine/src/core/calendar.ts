@@ -122,9 +122,11 @@ export function computeRawPillars(dt: NormalizedDateTime): RawPillars {
 }
 
 /**
- * 计算生肖。
+ * 计算生肖（以"立春"为年柱分界，与八字年柱一致）。
  */
 export function computeZodiac(dt: NormalizedDateTime): string {
   const solar = Solar.fromYmdHms(dt.year, dt.month, dt.day, dt.hour, dt.minute, 0);
-  return solar.getLunar().getYearShengXiao();
+  const lunar = solar.getLunar();
+  // getYearShengXiao 默认按阴历新年分界；八字应以立春分界，因此用 Exact 版本
+  return lunar.getYearShengXiaoExact?.() ?? lunar.getYearShengXiao();
 }

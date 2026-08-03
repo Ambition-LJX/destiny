@@ -2,20 +2,13 @@ import { Injectable } from '@nestjs/common';
 import { PassportStrategy } from '@nestjs/passport';
 import { ConfigService } from '@nestjs/config';
 import { ExtractJwt, Strategy } from 'passport-jwt';
+import type { AuthUser } from '../../../common/dto/auth.types';
 
 /**
  * JWT 载荷。
  */
 export interface JwtPayload {
   sub: string;
-  email: string;
-}
-
-/**
- * 登录用户上下文（挂载到 request.user）。
- */
-export interface AuthUser {
-  userId: string;
   email: string;
 }
 

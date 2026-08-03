@@ -1,7 +1,7 @@
 import { Body, Controller, Get, Param, Post, UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
-import type { AuthUser } from '../auth/strategies/jwt.strategy';
+import type { AuthUser } from '../../common/dto/auth.types';
 import { ChartsService } from './charts.service';
 import { CalculateChartDto } from './dto/chart.dto';
 

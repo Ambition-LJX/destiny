@@ -1,12 +1,11 @@
 import { createParamDecorator, ExecutionContext } from '@nestjs/common';
+import type { AuthUser } from '../../../common/dto/auth.types';
 
 /**
  * 已认证用户信息（由 JwtStrategy.validate 注入到 request.user）。
+ * 从 common/dto/auth.types.ts 统一导出。
  */
-export interface AuthUser {
-  userId: string;
-  email: string;
-}
+export { type AuthUser } from '../../../common/dto/auth.types';
 
 /**
  * 从请求中提取当前登录用户。

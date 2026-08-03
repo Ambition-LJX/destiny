@@ -37,6 +37,14 @@ export const STRENGTH_LABEL: Record<string, string> = {
   balanced: '中和',
 };
 
+/** 柱位英文枚举 -> 中文柱名 */
+export const PILLAR_POSITION_LABEL: Record<'year' | 'month' | 'day' | 'hour', string> = {
+  year: '年柱',
+  month: '月柱',
+  day: '日柱',
+  hour: '时柱',
+};
+
 /** 报告维度元信息 */
 export const DIMENSIONS: { key: ReportDimension; label: string; icon: string }[] = [
   { key: 'personality', label: '性格特质', icon: '🧭' },

@@ -8,6 +8,12 @@ import { CITIES, findCity } from '@/lib/cities';
 import { loadRegions, type RegionProvince } from '@/lib/regions';
 import { profileApi, chartApi, ApiError } from '@/lib/api';
 import type { CalendarType, Gender } from '@/lib/types';
+import {
+  estimateSolarCorrectionMinutes,
+  applyClockCorrection,
+  getHourBranch,
+  formatHM,
+} from '@/lib/solarTime';
 
 /**
  * 录入向导：分步表单，城市选择带经纬度，真太阳时开关，时辰未知选项。
@@ -122,7 +128,7 @@ export default function NewChartPage() {
     <div className="min-h-screen">
       <NavBar />
       <main className="mx-auto max-w-lg px-4 py-10">
-        <h1 className="font-serif text-2xl font-bold text-ink-900">开始排盘</h1>
+        <h1 className="font-serif text-2xl font-bold text-ink-900 dark:text-ink-100">开始排盘</h1>
         <Stepper step={step} />
 
         <div className="card mt-6">
@@ -140,10 +146,10 @@ export default function NewChartPage() {
               <div>
                 <label className="label">性别</label>
                 <div className="flex gap-2">
-                  <Choice active={gender === 'male'} onClick={() => setGender('male')}>
+                  <Choice active={gender === 'male'} onClick={() => setGender('male')} accent="water">
                     男
                   </Choice>
-                  <Choice active={gender === 'female'} onClick={() => setGender('female')}>
+                  <Choice active={gender === 'female'} onClick={() => setGender('female')} accent="fire">
                     女
                   </Choice>
                 </div>
@@ -157,10 +163,10 @@ export default function NewChartPage() {
               <div>
                 <label className="label">历法</label>
                 <div className="flex gap-2">
-                  <Choice active={calendar === 'solar'} onClick={() => setCalendar('solar')}>
+                  <Choice active={calendar === 'solar'} onClick={() => setCalendar('solar')} accent="metal">
                     公历
                   </Choice>
-                  <Choice active={calendar === 'lunar'} onClick={() => setCalendar('lunar')}>
+                  <Choice active={calendar === 'lunar'} onClick={() => setCalendar('lunar')} accent="earth">
                     农历
                   </Choice>
                 </div>
@@ -173,7 +179,7 @@ export default function NewChartPage() {
               </div>
 
               {calendar === 'lunar' && (
-                <label className="flex items-center gap-2 text-sm text-ink-700">
+                <label className="flex items-center gap-2 text-sm text-ink-700 dark:text-ink-300">
                   <input
                     type="checkbox"
                     checked={isLeapMonth}
@@ -184,7 +190,7 @@ export default function NewChartPage() {
               )}
 
               <div>
-                <label className="flex items-center gap-2 text-sm text-ink-700">
+                <label className="flex items-center gap-2 text-sm text-ink-700 dark:text-ink-300">
                   <input
                     type="checkbox"
                     checked={!hourKnown}
@@ -195,9 +201,22 @@ export default function NewChartPage() {
               </div>
 
               {hourKnown && (
-                <div className="grid grid-cols-2 gap-3">
-                  <NumField label="时" value={hour} min={0} max={23} onChange={setHour} />
-                  <NumField label="分" value={minute} min={0} max={59} onChange={setMinute} />
+                <div className="space-y-2">
+                  <div className="grid grid-cols-2 gap-3">
+                    <NumField label="时" value={hour} min={0} max={23} onChange={setHour} />
+                    <NumField label="分" value={minute} min={0} max={59} onChange={setMinute} />
+                  </div>
+                  <div className="rounded-lg border border-earth/30 bg-earth/5 px-3 py-2 text-xs text-ink-600 dark:border-earth/40 dark:bg-earth/10 dark:text-ink-300">
+                    <span>
+                      当前钟表时间对应时辰：
+                      <b className="ml-1 text-ink-900 dark:text-ink-100">{getHourBranch(hour, minute)}时</b>
+                    </span>
+                    {(hour === 23 || hour === 0 || hour === 1) && (
+                      <p className="mt-1 text-fire">
+                        ⚠ 时辰边界：23:00–01:00 属于"子时"，部分流派认为跨越当日，23:00 仍属当日、00:00 后属次日；启用真太阳时后会有进一步调整。
+                      </p>
+                    )}
+                  </div>
                 </div>
               )}
 
@@ -232,13 +251,13 @@ export default function NewChartPage() {
                   ))}
                   <option value={CUSTOM_VALUE}>其它（手动输入省市县）</option>
                 </select>
-                <p className="mt-1 text-xs text-ink-400">
+                <p className="mt-1 text-xs text-ink-400 dark:text-ink-500">
                   经纬度用于真太阳时校正，作为"空间/磁场"的可计算代理变量。
                 </p>
               </div>
 
               {customPlace && (
-                <div className="space-y-3 rounded-lg border border-ink-200 bg-ink-50 p-3">
+                <div className="space-y-3 rounded-lg border border-water/20 bg-water/5 p-3 dark:border-water/30 dark:bg-water/10">
                   <div className="grid grid-cols-3 gap-3">
                     <div>
                       <label className="label">省</label>
@@ -331,14 +350,14 @@ export default function NewChartPage() {
                   {regionsError ? (
                     <p className="text-xs text-fire">{regionsError}</p>
                   ) : (
-                    <p className="text-xs text-ink-400">
+                    <p className="text-xs text-ink-400 dark:text-ink-500">
                       选择省/市/县后自动带出该地区中心经纬度，用于真太阳时校正；也可手动微调为出生地实际经纬度。
                     </p>
                   )}
                 </div>
               )}
 
-              <label className="flex items-center gap-2 text-sm text-ink-700">
+              <label className="flex items-center gap-2 text-sm text-ink-700 dark:text-ink-300">
                 <input
                   type="checkbox"
                   checked={useTrueSolarTime}
@@ -346,6 +365,23 @@ export default function NewChartPage() {
                 />
                 启用真太阳时校正（推荐，按经度与均时差修正）
               </label>
+
+              {useTrueSolarTime && hourKnown && (
+                <TrueSolarPreview
+                  longitude={coords.longitude}
+                  month={month}
+                  day={day}
+                  hour={hour}
+                  minute={minute}
+                />
+              )}
+
+              {useTrueSolarTime && Math.abs(coords.longitude - 120) > 10 && (
+                <p className="rounded-lg border border-fire/40 bg-fire/10 px-3 py-2 text-xs text-fire">
+                  ⚠ 出生地经度远离东经 120°（北京时间基准），校正量较大，将对时柱/日柱产生显著影响。
+                  建议先与原始出生证明 / 出生医院记录核对。
+                </p>
+              )}
 
               {error && <p className="text-sm text-fire">{error}</p>}
 
@@ -363,6 +399,8 @@ export default function NewChartPage() {
   );
 }
 
+const STEP_ACTIVE_BG = ['bg-wood', 'bg-fire', 'bg-earth'];
+
 function Stepper({ step }: { step: number }) {
   const labels = ['基本信息', '出生时间', '出生地'];
   return (
@@ -370,15 +408,24 @@ function Stepper({ step }: { step: number }) {
       {labels.map((l, i) => (
         <div key={l} className="flex flex-1 items-center gap-2">
           <span
-            className={`flex h-7 w-7 items-center justify-center rounded-full text-sm ${
-              step >= i + 1 ? 'bg-ink-900 text-white' : 'bg-ink-100 text-ink-400'
+            className={`flex h-7 w-7 items-center justify-center rounded-full text-sm font-medium transition-colors ${
+              step >= i + 1
+                ? `${STEP_ACTIVE_BG[i]} text-white`
+                : 'bg-ink-100 text-ink-400 dark:bg-ink-800 dark:text-ink-500'
             }`}
           >
             {i + 1}
           </span>
-          <span className={`text-sm ${step >= i + 1 ? 'text-ink-900' : 'text-ink-400'}`}>
+          <span
+            className={`text-sm ${
+              step >= i + 1 ? 'text-ink-900 dark:text-ink-100' : 'text-ink-400 dark:text-ink-500'
+            }`}
+          >
             {l}
           </span>
+          {i < labels.length - 1 && (
+            <span className="ml-1 h-px flex-1 bg-ink-100 dark:bg-ink-800" />
+          )}
         </div>
       ))}
     </div>
@@ -412,23 +459,33 @@ function StepNav({
   );
 }
 
+const CHOICE_ACTIVE_STYLES = {
+  wood: 'border-wood bg-wood text-white',
+  fire: 'border-fire bg-fire text-white',
+  earth: 'border-earth bg-earth text-white',
+  metal: 'border-metal bg-metal text-white',
+  water: 'border-water bg-water text-white',
+} as const;
+
 function Choice({
   active,
   onClick,
   children,
+  accent = 'wood',
 }: {
   active: boolean;
   onClick: () => void;
   children: React.ReactNode;
+  accent?: keyof typeof CHOICE_ACTIVE_STYLES;
 }) {
   return (
     <button
       type="button"
       onClick={onClick}
-      className={`flex-1 rounded-lg border px-4 py-2 text-sm transition ${
+      className={`flex-1 rounded-lg border px-4 py-2 text-sm font-medium transition ${
         active
-          ? 'border-ink-900 bg-ink-900 text-white'
-          : 'border-ink-200 bg-white text-ink-700 hover:border-ink-300'
+          ? CHOICE_ACTIVE_STYLES[accent]
+          : 'border-ink-200 bg-white text-ink-700 hover:border-ink-300 dark:border-ink-700 dark:bg-ink-900 dark:text-ink-300 dark:hover:border-ink-600'
       }`}
     >
       {children}
@@ -460,6 +517,58 @@ function NumField({
         max={max}
         onChange={(e) => onChange(Number(e.target.value))}
       />
+    </div>
+  );
+}
+
+/**
+ * 真太阳时校正预览：展示钟表时间校正后的真太阳钟表时间，以及新时辰/新日柱影响。
+ */
+function TrueSolarPreview({
+  longitude,
+  month,
+  day,
+  hour,
+  minute,
+}: {
+  longitude: number;
+  month: number;
+  day: number;
+  hour: number;
+  minute: number;
+}) {
+  const correction = estimateSolarCorrectionMinutes(longitude, month, day);
+  const corrected = applyClockCorrection(hour, minute, correction);
+  const origBranch = getHourBranch(hour, minute);
+  const newBranch = getHourBranch(corrected.hour, corrected.minute);
+  const branchChanged = origBranch !== newBranch;
+
+  return (
+    <div className="rounded-lg border border-wood/40 bg-wood/5 px-3 py-2 text-xs text-ink-700 dark:border-wood/30 dark:bg-wood/10 dark:text-ink-300 space-y-1">
+      <p>
+        真太阳时校正量：
+        <b className="ml-1 text-ink-900 dark:text-ink-100">
+          {correction >= 0 ? '+' : ''}
+          {correction} 分钟
+        </b>
+        <span className="ml-2 text-ink-400 dark:text-ink-500">
+          （经度差 {(longitude - 120).toFixed(2)}° × 4 + 均时差）
+        </span>
+      </p>
+      <p>
+        钟表时间 {formatHM(hour, minute)} → 真太阳钟表时间
+        <b className="ml-1 text-ink-900 dark:text-ink-100">{formatHM(corrected.hour, corrected.minute)}</b>
+        {corrected.crossesDay && <span className="ml-1 text-fire">（跨越日期）</span>}
+      </p>
+      {branchChanged && (
+        <p className="text-fire">
+          ⚠ 时辰将由
+          <b className="mx-1">{origBranch}时</b>
+          变为
+          <b className="ml-1">{newBranch}时</b>
+          ，日柱/时柱将发生变化。
+        </p>
+      )}
     </div>
   );
 }

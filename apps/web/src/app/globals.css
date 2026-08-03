@@ -6,9 +6,67 @@
   color-scheme: light;
 }
 
+.dark {
+  color-scheme: dark;
+}
+
 body {
-  @apply bg-ink-50 text-ink-900 antialiased;
+  @apply text-ink-900 antialiased;
   font-feature-settings: 'kern' 1;
+  background-color: #f6f7f9;
+  background-image:
+    radial-gradient(circle at 8% 8%, rgba(63, 163, 77, 0.08) 0%, transparent 32%),
+    radial-gradient(circle at 92% 12%, rgba(229, 72, 77, 0.07) 0%, transparent 32%),
+    radial-gradient(circle at 50% 0%, rgba(200, 149, 47, 0.06) 0%, transparent 40%),
+    radial-gradient(circle at 88% 88%, rgba(212, 175, 55, 0.07) 0%, transparent 32%),
+    radial-gradient(circle at 6% 90%, rgba(59, 130, 246, 0.07) 0%, transparent 32%);
+  background-attachment: fixed;
+  background-repeat: no-repeat;
+}
+
+.dark body {
+  @apply text-ink-100;
+  background-color: #141821;
+  background-image:
+    radial-gradient(circle at 8% 8%, rgba(63, 163, 77, 0.14) 0%, transparent 32%),
+    radial-gradient(circle at 92% 12%, rgba(229, 72, 77, 0.12) 0%, transparent 32%),
+    radial-gradient(circle at 50% 0%, rgba(200, 149, 47, 0.1) 0%, transparent 40%),
+    radial-gradient(circle at 88% 88%, rgba(212, 175, 55, 0.12) 0%, transparent 32%),
+    radial-gradient(circle at 6% 90%, rgba(59, 130, 246, 0.12) 0%, transparent 32%);
+  background-attachment: fixed;
+  background-repeat: no-repeat;
+}
+
+/* 五行流动动画 */
+@keyframes wuxing-flow {
+  0% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: 0% 50%;
+  }
+}
+
+@keyframes wuxing-glow {
+  0%, 100% {
+    opacity: 0.6;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+.wuxing-nav-bg {
+  background-size: 300% 100%;
+  animation: wuxing-flow 12s ease-in-out infinite;
+}
+
+.wuxing-nav-bg-dark {
+  background-size: 300% 100%;
+  animation: wuxing-flow 12s ease-in-out infinite;
 }
 
 @layer components {
@@ -16,18 +74,37 @@ body {
     @apply inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition disabled:cursor-not-allowed disabled:opacity-50;
   }
   .btn-primary {
-    @apply btn bg-ink-900 text-white hover:bg-ink-800;
+    @apply btn bg-gradient-to-r from-wood to-fire text-white shadow-md shadow-wood/20 hover:shadow-lg hover:shadow-wood/30;
+  }
+  .dark .btn-primary {
+    @apply from-wood to-fire text-white shadow-wood/20;
   }
   .btn-ghost {
-    @apply btn border border-ink-200 bg-white text-ink-700 hover:border-ink-300 hover:bg-ink-50;
+    @apply btn border border-wood/30 bg-white text-ink-700 hover:border-wood/50 hover:bg-wood/5;
+  }
+  .dark .btn-ghost {
+    @apply border-wood/30 bg-ink-900 text-ink-200 hover:border-wood/50 hover:bg-wood/10;
   }
   .card {
-    @apply rounded-2xl border border-ink-100 bg-white p-6 shadow-card;
+    @apply relative overflow-hidden rounded-2xl border border-ink-100 bg-white/90 p-6 shadow-card backdrop-blur-sm;
+  }
+  .card::before {
+    content: '';
+    @apply absolute inset-x-0 top-0 h-[3px] bg-gradient-to-r from-wood via-fire via-earth via-metal to-water opacity-70;
+  }
+  .dark .card {
+    @apply border-ink-800 bg-ink-900/90 shadow-none;
   }
   .input {
-    @apply w-full rounded-lg border border-ink-200 bg-white px-3 py-2 text-sm outline-none transition focus:border-ink-400 focus:ring-2 focus:ring-ink-900/5;
+    @apply w-full rounded-lg border border-ink-200 bg-white px-3 py-2 text-sm text-ink-900 outline-none transition focus:border-wood/60 focus:ring-2 focus:ring-wood/10;
+  }
+  .dark .input {
+    @apply border-ink-700 bg-ink-900 text-ink-100 focus:border-wood/60 focus:ring-wood/10;
   }
   .label {
     @apply mb-1.5 block text-sm font-medium text-ink-700;
+  }
+  .dark .label {
+    @apply text-ink-300;
   }
 }
