@@ -90,7 +90,9 @@ body {
   }
   .card::before {
     content: '';
-    @apply absolute inset-x-0 top-0 h-[3px] bg-gradient-to-r from-wood via-fire via-earth via-metal to-water opacity-70;
+    @apply absolute inset-x-0 top-0 h-[3px] opacity-70;
+    /* 默认为五行渐变彩条；单个维度卡片可通过 --card-accent 变量覆盖为对应五行强调色 */
+    background: var(--card-accent, linear-gradient(to right, #3fa34d, #e5484d, #c8952f, #d4af37, #3b82f6));
   }
   .dark .card {
     @apply border-ink-800 bg-ink-900/90 shadow-none;

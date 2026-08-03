@@ -1,8 +1,8 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import { reportApi, streamSse } from '@/lib/api';
-import { DIMENSIONS } from '@/lib/elements';
+import { DIMENSION_ELEMENT, DIMENSIONS, ELEMENT_BG, ELEMENT_COLORS } from '@/lib/elements';
 import type { ReportDimension, StoredReport } from '@/lib/types';
 import { RichText } from './RichText';
 
@@ -190,11 +190,23 @@ export function ReportPanel({ chartId }: { chartId: string }) {
         {DIMENSIONS.map((d) => {
           const st = states[d.key];
           const historyList = history[d.key] ?? [];
+          const element = DIMENSION_ELEMENT[d.key];
+          const accentColor = ELEMENT_COLORS[element];
+          const accentBg = ELEMENT_BG[element];
           return (
-            <div key={d.key} className="card">
+            <div
+              key={d.key}
+              className="card"
+              style={{ '--card-accent': accentColor } as CSSProperties}
+            >
               <div className="flex items-center justify-between">
-                <h3 className="flex items-center gap-2 font-medium text-ink-900">
-                  <span className="text-xl">{d.icon}</span>
+                <h3 className="flex items-center gap-2 font-medium text-ink-900 dark:text-ink-100">
+                  <span
+                    className="flex h-8 w-8 items-center justify-center rounded-full text-base"
+                    style={{ backgroundColor: accentBg }}
+                  >
+                    {d.icon}
+                  </span>
                   {d.label}
                 </h3>
                 <div className="flex items-center gap-2">
@@ -218,7 +230,7 @@ export function ReportPanel({ chartId }: { chartId: string }) {
               )}
 
               {st?.content && (
-                <div className="mt-3">
+                <div className="mt-4">
                   <RichText text={st.content} />
                   {st.loading && (
                     <span className="ml-0.5 animate-pulse text-ink-400">▋</span>
@@ -233,7 +245,7 @@ export function ReportPanel({ chartId }: { chartId: string }) {
               )}
 
               {historyList.length > 0 && (
-                <details className="mt-3 text-xs text-ink-500">
+                <details className="mt-4 text-xs text-ink-500">
                   <summary className="cursor-pointer text-ink-400">
                     历史报告（{historyList.length}）
                   </summary>

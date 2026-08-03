@@ -56,6 +56,21 @@ export const DIMENSIONS: { key: ReportDimension; label: string; icon: string }[]
   { key: 'luck', label: '大运流年', icon: '📈' },
 ];
 
+/**
+ * 报告维度 → 五行强调色映射，用于给解读卡片增加轻量识别色（图标底色/强调边框）。
+ * 映射取意象关联而非严格命理对应：性格/六亲主根基取木，事业/大运主动势取火，
+ * 财运主厚积取土，感情主流转取水，健康主收敛调养取金。
+ */
+export const DIMENSION_ELEMENT: Record<ReportDimension, Element> = {
+  personality: '木',
+  family: '木',
+  career: '火',
+  luck: '火',
+  wealth: '土',
+  relationship: '水',
+  health: '金',
+};
+
 export const DIMENSION_LABEL: Record<ReportDimension, string> = {
   personality: '性格特质',
   career: '事业',
