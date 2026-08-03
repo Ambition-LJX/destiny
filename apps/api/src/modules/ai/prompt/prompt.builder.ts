@@ -107,7 +107,7 @@ const TWELVE_STAGE_HINT: Record<string, string> = {
  */
 function formatPillar(name: string, p: Pillar | null): string {
   if (!p) return `${name}：（时辰未知，未排时柱）`;
-  const stage = p.twelveStage ? `；长生十二：${p.twelveStage}` : '';
+  const stage = `；长生十二：${p.twelveStage}`;
   return `${name}：${p.heavenlyStem}${p.earthlyBranch}（天干十神：${p.tenGod}；纳音：${p.naYin}(${p.naYinElement})；藏干：${p.hiddenStems.join('、')}；藏干十神：${p.hiddenStemTenGods.join('、')}${stage}）`;
 }
 
@@ -130,10 +130,6 @@ function formatTwelveStages(chart: BaziChart): string {
   for (const it of items) {
     if (!it.p) {
       lines.push(`- ${it.name}：未知（时辰未排）`);
-      continue;
-    }
-    if (it.name === '日柱') {
-      lines.push(`- ${it.name}：${it.p.heavenlyStem}${it.p.earthlyBranch}（日主本位，不算长生阶段，但其地支「${it.p.earthlyBranch}」即是长生十二宫的对照原点之一）`);
       continue;
     }
     const stage = it.p.twelveStage ?? '未取';

@@ -24,9 +24,8 @@ export function buildPillar(
   const b = branch as EarthlyBranch;
   const hidden = BRANCH_HIDDEN_STEMS[b] ?? [];
   const naYin = NAYIN_TABLE[`${stem}${branch}`] ?? '未知';
-  const twelveStage: TwelveStage | undefined = isDayPillar
-    ? undefined
-    : twelveStageOf(dayMaster, b);
+  // 十二长生：日主在日支上的状态同样重要（日坐长生/帝旺/墓库等是关键命理信号），不再留空
+  const twelveStage: TwelveStage = twelveStageOf(dayMaster, b);
 
   return {
     heavenlyStem: stem,

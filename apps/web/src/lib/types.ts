@@ -69,7 +69,8 @@ export interface Pillar {
   naYinElement: Element;
   element: Element;
   branchElement: Element;
-  twelveStage?: TwelveStage;
+  /** 该柱相对日主天干的十二长生阶段（含日柱） */
+  twelveStage: TwelveStage;
 }
 
 export interface FiveElementsResult {

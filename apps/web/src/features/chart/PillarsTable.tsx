@@ -104,11 +104,7 @@ export function PillarsTable({ chart }: { chart: BaziChart }) {
             {cols.map((c) => (
               <Cell key={c.key}>
                 {c.pillar ? (
-                  c.pillar.twelveStage ? (
-                    <span className="text-xs text-fire">{c.pillar.twelveStage}</span>
-                  ) : (
-                    <span className="text-xs text-ink-300">—（日柱）</span>
-                  )
+                  <span className="text-xs text-fire">{c.pillar.twelveStage}</span>
                 ) : (
                   <Unknown />
                 )}

@@ -19,15 +19,18 @@ function baseInput(overrides: Partial<BirthInput> = {}): BirthInput {
 }
 
 describe('十二长生与纳音五行', () => {
-  it('日柱不输出十二长生（自身）', () => {
+  it('日柱也输出十二长生（日主坐支的旺衰状态，如日坐长生/帝旺/墓库等）', () => {
     const chart = calculateBazi(baseInput(), 2026);
-    expect(chart.pillars.day.twelveStage).toBeUndefined();
+    expect(chart.pillars.day.twelveStage).toBeDefined();
+    const stages = ['长生', '沐浴', '冠带', '临官', '帝旺', '衰', '病', '死', '墓', '绝', '胎', '养'];
+    expect(stages).toContain(chart.pillars.day.twelveStage);
   });
 
-  it('其他柱输出十二长生', () => {
+  it('四柱均输出十二长生', () => {
     const chart = calculateBazi(baseInput(), 2026);
     expect(chart.pillars.year.twelveStage).toBeDefined();
     expect(chart.pillars.month.twelveStage).toBeDefined();
+    expect(chart.pillars.day.twelveStage).toBeDefined();
     expect(chart.pillars.hour?.twelveStage).toBeDefined();
   });
 

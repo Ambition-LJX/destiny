@@ -69,8 +69,8 @@ export interface Pillar {
   element: Element;
   /** 该柱地支对应五行 */
   branchElement: Element;
-  /** 该柱相对日主天干的十二长生阶段（仅在日柱之外的柱上算） */
-  twelveStage?: TwelveStage;
+  /** 该柱相对日主天干的十二长生阶段（含日柱：日主坐支的状态，如日坐长生/帝旺/墓库等） */
+  twelveStage: TwelveStage;
 }
 
 /**
