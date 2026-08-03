@@ -19,6 +19,23 @@ interface DimensionState {
   elapsed?: number;
 }
 
+/** 生成模式：全部重新生成 / 仅生成缺失项 */
+type GenerateMode = 'all' | 'missing';
+
+/** 全局生成状态 */
+interface GlobalProgress {
+  total: number;
+  completed: number;
+  failed: number;
+  isGenerating: boolean;
+  /** 当前正在生成中的维度 key 列表 */
+  activeDims: string[];
+  /** 本次生成的起始时间 */
+  startTime?: number;
+  /** 是否已完成（用于显示汇总） */
+  finished?: boolean;
+}
+
 const MAX_CONCURRENT = 3;
 
 function formatTime(iso: string): string {
@@ -37,21 +54,20 @@ function formatElapsed(ms: number): string {
 
 /**
  * 报告面板：分维度卡片，点击后流式生成并渲染。
- * 支持：单维度流式生成（带进度条/字符数/耗时）、一键生成（并发流式，限制并发数）、重新生成、历史报告时间轴。
+ * 支持：单维度流式生成、一键生成（并发流式，限制并发数）、仅生成缺失项、重试失败项、重新生成、历史报告时间轴。
  */
 export function ReportPanel({ chartId }: { chartId: string }) {
   const [states, setStates] = useState<Record<string, DimensionState>>({});
   const [disclaimer, setDisclaimer] = useState<string>('');
   const [history, setHistory] = useState<Record<string, StoredReport[]>>({});
-  const [globalProgress, setGlobalProgress] = useState<{
-    total: number;
-    completed: number;
-    failed: number;
-    isGenerating: boolean;
-    currentDim?: string;
-  }>({ total: 0, completed: 0, failed: 0, isGenerating: false });
+  const [globalProgress, setGlobalProgress] = useState<GlobalProgress>({
+    total: 0,
+    completed: 0,
+    failed: 0,
+    isGenerating: false,
+    activeDims: [],
+  });
 
-  // Refs 用于追踪流式数据（避免闭包问题）
   const contentRef = useRef<Record<string, string>>({});
   const startTimeRef = useRef<Record<string, number>>({});
   const abortRef = useRef<Record<string, AbortController>>({});
@@ -110,44 +126,7 @@ export function ReportPanel({ chartId }: { chartId: string }) {
     };
   }, [chartId]);
 
-  const updateGlobalProgress = useCallback(
-    (action: 'start' | 'complete' | 'fail' | 'reset', dim?: string, total?: number) => {
-      setGlobalProgress((prev) => {
-        if (action === 'start') {
-          return {
-            total: total ?? DIMENSIONS.length,
-            completed: prev.completed,
-            failed: prev.failed,
-            isGenerating: true,
-            currentDim: dim,
-          };
-        }
-        if (action === 'complete') {
-          const newCompleted = prev.completed + 1;
-          return {
-            ...prev,
-            completed: newCompleted,
-            currentDim: undefined,
-            isGenerating: newCompleted + prev.failed < (prev.total || 0),
-          };
-        }
-        if (action === 'fail') {
-          const newFailed = prev.failed + 1;
-          return {
-            ...prev,
-            failed: newFailed,
-            currentDim: undefined,
-            isGenerating: prev.completed + newFailed < (prev.total || 0),
-          };
-        }
-        if (action === 'reset') {
-          return { total: 0, completed: 0, failed: 0, isGenerating: false };
-        }
-        return prev;
-      });
-    },
-    [],
-  );
+  // ====== 单维度生成 ======
 
   const generateDimension = useCallback(
     async (dim: ReportDimension, onComplete?: () => void) => {
@@ -158,6 +137,7 @@ export function ReportPanel({ chartId }: { chartId: string }) {
       startTimeRef.current[dim] = startTime;
       abortRef.current[dim] = new AbortController();
 
+      // 标记该维度为生成中，并加入 activeDims
       setStates((s) => ({
         ...s,
         [dim]: {
@@ -168,15 +148,17 @@ export function ReportPanel({ chartId }: { chartId: string }) {
           elapsed: 0,
         },
       }));
+      setGlobalProgress((prev) => ({
+        ...prev,
+        activeDims: [...prev.activeDims, dim],
+      }));
 
       try {
         await streamSse(
           `/reports/stream?chartId=${encodeURIComponent(chartId)}&dimension=${dim}`,
           {
             method: 'GET',
-            headers: {
-              'idempotency-key': idempKey,
-            },
+            headers: { 'idempotency-key': idempKey },
           },
           {
             onDelta: (text) => {
@@ -223,7 +205,11 @@ export function ReportPanel({ chartId }: { chartId: string }) {
                   ...(h[dim] ?? []),
                 ],
               }));
-              updateGlobalProgress('complete', dim);
+              setGlobalProgress((prev) => ({
+                ...prev,
+                completed: prev.completed + 1,
+                activeDims: prev.activeDims.filter((d) => d !== dim),
+              }));
               onComplete?.();
             },
             onError: (message) => {
@@ -231,7 +217,11 @@ export function ReportPanel({ chartId }: { chartId: string }) {
                 ...s,
                 [dim]: { ...s[dim], loading: false, done: true, error: message },
               }));
-              updateGlobalProgress('fail', dim);
+              setGlobalProgress((prev) => ({
+                ...prev,
+                failed: prev.failed + 1,
+                activeDims: prev.activeDims.filter((d) => d !== dim),
+              }));
               onComplete?.();
             },
           },
@@ -240,18 +230,17 @@ export function ReportPanel({ chartId }: { chartId: string }) {
       } catch {
         setStates((s) => ({
           ...s,
-          [dim]: {
-            ...s[dim],
-            loading: false,
-            done: true,
-            error: '请求被中断',
-          },
+          [dim]: { ...s[dim], loading: false, done: true, error: '请求被中断' },
         }));
-        updateGlobalProgress('fail', dim);
+        setGlobalProgress((prev) => ({
+          ...prev,
+          failed: prev.failed + 1,
+          activeDims: prev.activeDims.filter((d) => d !== dim),
+        }));
         onComplete?.();
       }
     },
-    [chartId, updateGlobalProgress],
+    [chartId],
   );
 
   const generate = useCallback(
@@ -265,14 +254,15 @@ export function ReportPanel({ chartId }: { chartId: string }) {
     abortRef.current[dim]?.abort();
     setStates((s) => ({
       ...s,
-      [dim]: {
-        ...s[dim],
-        loading: false,
-        done: true,
-        error: '已取消生成',
-      },
+      [dim]: { ...s[dim], loading: false, done: true, error: '已取消生成' },
+    }));
+    setGlobalProgress((prev) => ({
+      ...prev,
+      activeDims: prev.activeDims.filter((d) => d !== dim),
     }));
   }, []);
+
+  // ====== 批量生成 ======
 
   /**
    * 并发控制：按批次执行任务，每批最多 MAX_CONCURRENT 个
@@ -287,41 +277,91 @@ export function ReportPanel({ chartId }: { chartId: string }) {
     [],
   );
 
-  const generateAll = useCallback(async () => {
-    updateGlobalProgress('reset');
+  /**
+   * 一键生成：支持「全部重新生成」和「仅生成缺失项」两种模式
+   */
+  const generateAll = useCallback(
+    async (mode: GenerateMode = 'all') => {
+      // 确定需要生成的维度列表
+      let dimsToGenerate: ReportDimension[];
+      if (mode === 'missing') {
+        dimsToGenerate = DIMENSIONS.filter(
+          (d) => !states[d.key]?.done || !states[d.key]?.content,
+        ).map((d) => d.key);
+        if (dimsToGenerate.length === 0) return; // 没有缺失项
+      } else {
+        dimsToGenerate = DIMENSIONS.map((d) => d.key);
+      }
 
-    // 初始化全局进度
+      // 初始化全局进度
+      setGlobalProgress({
+        total: dimsToGenerate.length,
+        completed: 0,
+        failed: 0,
+        isGenerating: true,
+        activeDims: [],
+        startTime: Date.now(),
+        finished: false,
+      });
+
+      // 重置待生成维度的状态
+      setStates((s) => {
+        const next = { ...s };
+        for (const key of dimsToGenerate) {
+          next[key] = {
+            content: '',
+            loading: false, // 批次开始时还不是 loading，等真正开始才变 loading
+            done: false,
+            charCount: 0,
+            elapsed: 0,
+          };
+        }
+        return next;
+      });
+
+      // 并发控制：按批次生成
+      await runInBatches(dimsToGenerate, (key) => generateDimension(key));
+
+      // 标记完成
+      setGlobalProgress((prev) => ({
+        ...prev,
+        isGenerating: false,
+        activeDims: [],
+        finished: true,
+      }));
+    },
+    [generateDimension, runInBatches, states],
+  );
+
+  /**
+   * 重试所有失败的维度
+   */
+  const retryFailed = useCallback(async () => {
+    const failedDims = DIMENSIONS.filter(
+      (d) => states[d.key]?.error && states[d.key]?.error !== '已取消生成',
+    ).map((d) => d.key);
+
+    if (failedDims.length === 0) return;
+
     setGlobalProgress({
-      total: DIMENSIONS.length,
+      total: failedDims.length,
       completed: 0,
       failed: 0,
       isGenerating: true,
-      currentDim: DIMENSIONS[0]?.key,
+      activeDims: [],
+      startTime: Date.now(),
+      finished: false,
     });
 
-    // 重置所有维度状态
-    setStates((s) => {
-      const next = { ...s };
-      for (const d of DIMENSIONS) {
-        next[d.key] = {
-          content: '',
-          loading: true,
-          done: false,
-          charCount: 0,
-          elapsed: 0,
-        };
-      }
-      return next;
-    });
+    await runInBatches(failedDims, (key) => generateDimension(key));
 
-    // 并发控制：按批次生成
-    const dimKeys = DIMENSIONS.map((d) => d.key);
-    await runInBatches(dimKeys, (key) => generateDimension(key));
-
-    setTimeout(() => {
-      setGlobalProgress((prev) => ({ ...prev, isGenerating: false, currentDim: undefined }));
-    }, 300);
-  }, [generateDimension, runInBatches, updateGlobalProgress]);
+    setGlobalProgress((prev) => ({
+      ...prev,
+      isGenerating: false,
+      activeDims: [],
+      finished: true,
+    }));
+  }, [generateDimension, runInBatches, states]);
 
   const cancelAll = useCallback(() => {
     for (const d of DIMENSIONS) {
@@ -338,17 +378,50 @@ export function ReportPanel({ chartId }: { chartId: string }) {
       }
       return next;
     });
-    setGlobalProgress((prev) => ({ ...prev, isGenerating: false, currentDim: undefined }));
+    setGlobalProgress((prev) => ({
+      ...prev,
+      isGenerating: false,
+      activeDims: [],
+      finished: true,
+    }));
   }, [states]);
 
+  // ====== 计算进度 ======
+
+  const loadingCount = globalProgress.activeDims.length;
   const completedCount = globalProgress.completed + globalProgress.failed;
-  const overallProgress = globalProgress.total > 0 ? (completedCount / globalProgress.total) * 100 : 0;
+  // 进度计算：已完成维度占满权重，正在生成中的维度按 0.5 权重计入
+  const effectiveProgress =
+    globalProgress.total > 0
+      ? ((globalProgress.completed + globalProgress.failed + loadingCount * 0.5) / globalProgress.total) * 100
+      : 0;
   const hasAnyLoading = Object.values(states).some((s) => s.loading);
+
+  // 统计已有/缺失
+  const existingCount = DIMENSIONS.filter(
+    (d) => states[d.key]?.done && states[d.key]?.content,
+  ).length;
+  const missingCount = DIMENSIONS.length - existingCount;
+  const failedCount = DIMENSIONS.filter(
+    (d) => states[d.key]?.error && states[d.key]?.error !== '已取消生成',
+  ).length;
+
+  // 完成汇总的耗时（取 startTime 到现在）
+  const finishedElapsed = globalProgress.startTime
+    ? Date.now() - globalProgress.startTime
+    : 0;
 
   return (
     <div>
       <div className="mb-4 flex items-center justify-between gap-3">
-        <h2 className="text-lg font-semibold text-ink-900 dark:text-ink-100">AI 命理解读</h2>
+        <div>
+          <h2 className="text-lg font-semibold text-ink-900 dark:text-ink-100">AI 命理解读</h2>
+          {missingCount > 0 && !globalProgress.isGenerating && !globalProgress.finished && (
+            <p className="mt-0.5 text-xs text-ink-400">
+              已生成 {existingCount}/{DIMENSIONS.length} 个维度，还有 {missingCount} 个待生成
+            </p>
+          )}
+        </div>
         <div className="flex items-center gap-2">
           {hasAnyLoading && (
             <button
@@ -358,18 +431,38 @@ export function ReportPanel({ chartId }: { chartId: string }) {
               取消全部
             </button>
           )}
+          {/* 仅生成缺失项 */}
+          {missingCount > 0 && !globalProgress.isGenerating && (
+            <button
+              className="btn-ghost text-xs"
+              onClick={() => generateAll('missing')}
+              title={`只生成缺失的 ${missingCount} 个维度，不影响已有内容`}
+            >
+              生成缺失项 ({missingCount})
+            </button>
+          )}
+          {/* 重试失败项 */}
+          {failedCount > 0 && !globalProgress.isGenerating && (
+            <button
+              className="btn-ghost text-xs border-fire/40 text-fire hover:border-fire hover:bg-fire/5"
+              onClick={retryFailed}
+            >
+              重试失败项 ({failedCount})
+            </button>
+          )}
+          {/* 一键生成 */}
           <button
             className="btn-primary"
-            onClick={generateAll}
+            onClick={() => generateAll('all')}
             disabled={globalProgress.isGenerating}
           >
             {globalProgress.isGenerating ? (
               <span className="flex items-center gap-1.5">
                 <span className="inline-block h-3 w-3 animate-spin rounded-full border-2 border-white/30 border-t-white" />
-                生成中 ({completedCount}/{DIMENSIONS.length})
+                生成中 ({completedCount}/{globalProgress.total || DIMENSIONS.length})
               </span>
             ) : (
-              '一键生成全部维度'
+              existingCount > 0 ? '重新生成全部' : '一键生成全部维度'
             )}
           </button>
         </div>
@@ -377,27 +470,101 @@ export function ReportPanel({ chartId }: { chartId: string }) {
 
       {/* 全局进度条 */}
       {globalProgress.isGenerating && (
-        <div className="mb-4 rounded-xl border border-ink-100 bg-white/80 p-3 backdrop-blur-sm dark:border-ink-800 dark:bg-ink-900/60">
+        <div className="mb-4 rounded-xl border border-ink-100 bg-white/80 p-4 backdrop-blur-sm dark:border-ink-800 dark:bg-ink-900/60">
           <ProgressBar
-            value={overallProgress}
+            value={effectiveProgress}
             variant="wood"
             size="md"
             showPercent
             label={
-              globalProgress.currentDim ? (
-                <span className="flex items-center gap-1.5">
-                  <span>正在生成：</span>
-                  <LoadingDots
-                    text={DIMENSIONS.find((d) => d.key === globalProgress.currentDim)?.label}
-                    dotClassName="bg-wood"
-                  />
+              loadingCount > 0 ? (
+                <span className="flex items-center gap-2">
+                  <LoadingDots text={`正在生成 ${loadingCount} 个维度`} dotClassName="bg-wood" />
                 </span>
               ) : (
-                <span>总体进度</span>
+                <span className="text-ink-500">准备中…</span>
               )
             }
-            extra={`${completedCount} / ${DIMENSIONS.length} 维度`}
+            extra={
+              <span className="tabular-nums">
+                {completedCount} / {globalProgress.total} 完成
+                {globalProgress.startTime && ` · ${formatElapsed(Date.now() - globalProgress.startTime)}`}
+              </span>
+            }
           />
+          {/* 维度状态指示器 */}
+          <div className="mt-3 flex flex-wrap gap-2">
+            {DIMENSIONS.map((d) => {
+              const st = states[d.key];
+              const isActive = globalProgress.activeDims.includes(d.key);
+              const isCompleted = globalProgress.completed > 0 && st?.done && !st?.error && st?.content && !isActive;
+              const isFailed = st?.error && st?.error !== '已取消生成';
+              const isWaiting = globalProgress.isGenerating && !isActive && !st?.done;
+              const isCancelled = st?.error === '已取消生成';
+
+              return (
+                <div
+                  key={d.key}
+                  className={`flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs transition-all ${
+                    isActive
+                      ? 'bg-wood/10 text-wood ring-1 ring-wood/30 dark:bg-wood/15'
+                      : isCompleted
+                        ? 'bg-wood/5 text-wood/70 dark:bg-wood/10'
+                        : isFailed
+                          ? 'bg-fire/10 text-fire dark:bg-fire/15'
+                          : isCancelled
+                            ? 'bg-ink-100 text-ink-400 dark:bg-ink-800'
+                            : isWaiting
+                              ? 'bg-ink-100 text-ink-400 dark:bg-ink-800'
+                              : 'bg-ink-100 text-ink-400 dark:bg-ink-800'
+                  }`}
+                >
+                  <span>{d.icon}</span>
+                  <span>{d.label}</span>
+                  {isActive && (
+                    <span className="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-wood" />
+                  )}
+                  {isCompleted && (
+                    <svg className="h-3 w-3" viewBox="0 0 20 20" fill="currentColor">
+                      <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                    </svg>
+                  )}
+                  {isFailed && <span className="text-fire">✕</span>}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* 生成完成汇总 */}
+      {globalProgress.finished && !globalProgress.isGenerating && (globalProgress.completed > 0 || globalProgress.failed > 0) && (
+        <div className="mb-4 flex items-center justify-between rounded-xl border border-ink-100 bg-white/80 px-4 py-3 backdrop-blur-sm dark:border-ink-800 dark:bg-ink-900/60">
+          <div className="flex items-center gap-4 text-sm">
+            <span className="flex items-center gap-1.5 text-wood">
+              <svg className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+              </svg>
+              成功 {globalProgress.completed} 个
+            </span>
+            {globalProgress.failed > 0 && (
+              <span className="flex items-center gap-1.5 text-fire">
+                <svg className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+                  <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                </svg>
+                失败 {globalProgress.failed} 个
+              </span>
+            )}
+            <span className="text-ink-400">
+              总耗时 {formatElapsed(finishedElapsed)}
+            </span>
+          </div>
+          <button
+            className="text-xs text-ink-400 hover:text-ink-600 dark:hover:text-ink-300"
+            onClick={() => setGlobalProgress((prev) => ({ ...prev, finished: false }))}
+          >
+            ✕ 关闭
+          </button>
         </div>
       )}
 
