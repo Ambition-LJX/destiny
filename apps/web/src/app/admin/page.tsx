@@ -389,7 +389,7 @@ function OrdersPanel() {
         <StatCard label="订单总数" value={data?.total ?? 0} icon="📋" accent="ink" />
         <StatCard label="待确认" value={pendingCount} icon="⏳" accent="fire" sub="当前页" />
         <StatCard label="已开通" value={paidCount} icon="✅" accent="wood" sub="当前页" />
-        <StatCard label="已开通金额" value={fmtCny(revenue)} icon="💰" accent="amber" sub={`退款 ${fmtCny(refundAmount)}`} />
+        <StatCard label="已开通金额" value={fmtCny(revenue)} icon="💰" accent="wood" sub={`退款 ${fmtCny(refundAmount)}`} />
       </div>
 
       {/* 筛选工具栏 */}
@@ -695,7 +695,7 @@ function UsersPanel() {
         <StatCard label="用户总数" value={data?.total ?? 0} icon="👥" accent="sky" />
         <StatCard label="PRO 用户" value={proCount} icon="⭐" accent="wood" sub="当前页" />
         <StatCard label="已封禁" value={bannedCount} icon="🚫" accent="fire" sub="当前页" />
-        <StatCard label="累计成本" value={fmtCny(totalCost)} icon="💰" accent="amber" sub={`${fmtNum(totalTokens)} Token`} />
+        <StatCard label="累计成本" value={fmtCny(totalCost)} icon="💰" accent="fire" sub={`${fmtNum(totalTokens)} Token`} />
       </div>
 
       {/* 工具栏 */}
@@ -1143,7 +1143,7 @@ function CostPanel() {
           label="本月成本"
           value={fmtCny(stats.month.costCny)}
           icon="📊"
-          accent="amber"
+          accent="fire"
           sub={`${fmtNum(stats.month.calls)} 次调用 · ${fmtNum(stats.month.totalTokens)} Token`}
         />
         <StatCard
