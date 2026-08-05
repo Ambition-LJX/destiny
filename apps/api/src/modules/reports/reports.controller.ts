@@ -11,6 +11,7 @@ import {
 } from '@nestjs/common';
 import type { Response } from 'express';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { NotBannedGuard } from '../auth/guards/not-banned.guard';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import type { AuthUser } from '../../common/dto/auth.types';
 import { ReportsService } from './reports.service';
@@ -27,6 +28,7 @@ import type { ChatMessage } from '../ai/llm/llm.types';
  *
  * 生成与问答默认走 SSE 流式返回，提升体验；
  * 同时提供非流式聚合接口用于一次性生成全部维度。
+ * 成本统计等运营接口见 AdminModule（/admin/cost-stats）。
  */
 @Controller('reports')
 @UseGuards(JwtAuthGuard)
@@ -34,10 +36,28 @@ export class ReportsController {
   constructor(private readonly reports: ReportsService) {}
 
   /**
+   * 查询当前用户额度（剩余免费次数等）。
+   */
+  @Get('quota')
+  quota(@CurrentUser() user: AuthUser) {
+    return this.reports.getQuota(user.userId);
+  }
+
+  /**
+   * 单客成本模型：估算完整报告（全维度）+ 概览 + 问答的理论成本。
+   * 供定价参考与前端展示，无需额外鉴权。
+   */
+  @Get('cost-per-package')
+  costPerPackage() {
+    return this.reports.costPerPackage();
+  }
+
+  /**
    * 流式生成单维度报告（SSE）。
    * GET 便于前端用 EventSource；鉴权仍走 JWT。
    */
   @Get('stream')
+  @UseGuards(NotBannedGuard)
   async stream(
     @CurrentUser() user: AuthUser,
     @Query('chartId') chartId: string,
@@ -69,6 +89,7 @@ export class ReportsController {
    * 用大白话把命盘的核心特点解释清楚，让不懂术语的用户也能看懂。
    */
   @Get('overview')
+  @UseGuards(NotBannedGuard)
   async overview(
     @CurrentUser() user: AuthUser,
     @Query('chartId') chartId: string,
@@ -96,6 +117,7 @@ export class ReportsController {
    * 非流式生成全部（或指定）维度报告。
    */
   @Post('generate')
+  @UseGuards(NotBannedGuard)
   async generate(
     @CurrentUser() user: AuthUser,
     @Body() dto: GenerateReportDto,
@@ -127,6 +149,7 @@ export class ReportsController {
    * 命盘问答（SSE 流式）。
    */
   @Post('ask')
+  @UseGuards(NotBannedGuard)
   async ask(
     @CurrentUser() user: AuthUser,
     @Body() dto: AskDto,
@@ -160,6 +183,14 @@ export class ReportsController {
   @Get(':chartId')
   list(@CurrentUser() user: AuthUser, @Param('chartId') chartId: string) {
     return this.reports.listReports(user.userId, chartId);
+  }
+
+  /**
+   * 读取某排盘的问答历史（刷新页面后恢复记忆）。
+   */
+  @Get(':chartId/chat')
+  chatList(@CurrentUser() user: AuthUser, @Param('chartId') chartId: string) {
+    return this.reports.listChat(user.userId, chartId);
   }
 
   private initSse(res: Response): void {

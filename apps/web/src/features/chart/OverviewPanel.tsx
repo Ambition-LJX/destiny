@@ -1,10 +1,12 @@
 'use client';
 
 import { useEffect, useRef, useState, useCallback } from 'react';
-import { streamSse } from '@/lib/api';
+import { streamSse, reportApi } from '@/lib/api';
 import { RichText } from '../report/RichText';
 import { ProgressBar } from '@/components/ProgressBar';
 import { LoadingDots } from '@/components/LoadingDots';
+import { UnlockPrompt } from '@/components/UnlockPrompt';
+import { useBillingStore } from '@/lib/billingStore';
 
 interface OverviewPanelProps {
   chartId: string;
@@ -28,6 +30,33 @@ export function OverviewPanel({ chartId }: OverviewPanelProps) {
   const startTimeRef = useRef<number>(0);
   const abortRef = useRef<AbortController | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const plan = useBillingStore((s) => s.plan);
+  const overviewRemaining = useBillingStore((s) => s.overviewRemaining);
+  const refreshQuotaOnly = useBillingStore((s) => s.refreshQuotaOnly);
+
+  // 已生成过的概览（已落库 dimension='overview'）直接展示，不重复消耗免费次数
+  useEffect(() => {
+    let cancelled = false;
+    reportApi
+      .list(chartId)
+      .then((list) => {
+        if (cancelled) return;
+        const overview = list.find((r) => r.dimension === 'overview');
+        if (overview?.content) {
+          contentRef.current = overview.content;
+          setContent(overview.content);
+          setCharCount(overview.content.length);
+          setHasGenerated(true);
+        }
+      })
+      .catch(() => {
+        /* 静默 */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [chartId]);
 
   // 计时器
   useEffect(() => {
@@ -90,6 +119,7 @@ export function OverviewPanel({ chartId }: OverviewPanelProps) {
         onDone: (dc) => {
           if (dc) setDisclaimer(dc);
           setLoading(false);
+          refreshQuotaOnly();
         },
         onError: (msg) => {
           setError(msg);
@@ -118,9 +148,16 @@ export function OverviewPanel({ chartId }: OverviewPanelProps) {
             不懂命理术语？这里用大白话给你讲明白这张命盘是什么意思
           </p>
         </div>
-        {!loading && !hasGenerated && (
+        {!loading && !hasGenerated && plan !== 'pro' && overviewRemaining <= 0 && (
+          <span className="rounded-full border border-fire/40 bg-fire/10 px-3 py-1 text-xs text-fire">
+            本月免费次数已用完
+          </span>
+        )}
+        {!loading && !hasGenerated && (plan === 'pro' || overviewRemaining > 0) && (
           <button className="btn-primary" onClick={generate}>
-            开始解读
+            {plan === 'pro' || overviewRemaining > 0
+              ? `开始解读${plan === 'pro' ? '' : `（剩余 ${overviewRemaining} 次）`}`
+              : '开始解读'}
           </button>
         )}
         {loading && (
@@ -157,7 +194,13 @@ export function OverviewPanel({ chartId }: OverviewPanelProps) {
       )}
 
       {/* 初始状态提示 */}
-      {!hasGenerated && !loading && !error && (
+      {!hasGenerated && !loading && !error && plan !== 'pro' && overviewRemaining <= 0 && (
+        <UnlockPrompt
+          title="免费概览次数已用完"
+          desc="解锁完整版后，可无限次使用 AI 完整解读与命盘问答。"
+        />
+      )}
+      {!hasGenerated && !loading && !error && (plan === 'pro' || overviewRemaining > 0) && (
         <div className="flex flex-col items-center justify-center py-12 text-center">
           <div className="mb-4 text-5xl">🔮</div>
           <p className="text-sm text-ink-500 dark:text-ink-400">

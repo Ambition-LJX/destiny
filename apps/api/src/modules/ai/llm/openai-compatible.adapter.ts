@@ -34,10 +34,26 @@ export class OpenAiCompatibleAdapter implements LlmAdapter {
     const res = await this.request(messages, options, false);
     const json = (await res.json()) as {
       choices: { message: { content: string } }[];
-      usage?: LlmUsage;
+      usage?: {
+        prompt_tokens?: number;
+        completion_tokens?: number;
+        total_tokens?: number;
+        prompt_cache_hit_tokens?: number;
+        prompt_cache_miss_tokens?: number;
+      };
     };
     const content = json.choices?.[0]?.message?.content ?? '';
-    return { content, usage: json.usage };
+    const u = json.usage;
+    const usage: LlmUsage | undefined = u
+      ? {
+          promptTokens: u.prompt_tokens ?? u.total_tokens ?? 0,
+          completionTokens: u.completion_tokens ?? 0,
+          totalTokens: u.total_tokens ?? 0,
+          promptCacheHitTokens: u.prompt_cache_hit_tokens,
+          promptCacheMissTokens: u.prompt_cache_miss_tokens,
+        }
+      : undefined;
+    return { content, usage };
   }
 
   async *chatStream(
@@ -52,6 +68,8 @@ export class OpenAiCompatibleAdapter implements LlmAdapter {
     const reader = res.body.getReader();
     const decoder = new TextDecoder();
     let buffer = '';
+    let produced = false;
+    let reasoning = false;
 
     while (true) {
       const { done, value } = await reader.read();
@@ -68,14 +86,25 @@ export class OpenAiCompatibleAdapter implements LlmAdapter {
         if (payload === '[DONE]') return;
         try {
           const json = JSON.parse(payload) as {
-            choices: { delta?: { content?: string } }[];
+            choices: { delta?: { content?: string; reasoning_content?: string } }[];
           };
-          const delta = json.choices?.[0]?.delta?.content;
-          if (delta) yield delta;
+          const delta = json.choices?.[0]?.delta;
+          // 推理模型（DeepSeek 等）会先输出 reasoning_content 思考过程，
+          // 该内容不应展示给用户，仅用于判断是否发生了"只见思考、无正文"的情况。
+          if (delta?.reasoning_content) reasoning = true;
+          if (delta?.content) {
+            produced = true;
+            yield delta.content;
+          }
         } catch {
           /* 忽略非 JSON 心跳行 */
         }
       }
+    }
+
+    // 模型仅在思考、没有产出任何正文（max_tokens 被思考过程耗尽）时，视为失败
+    if (!produced && reasoning) {
+      throw new Error('模型思考过程占用了全部 token 预算，未生成有效回答，请重试');
     }
   }
 
@@ -89,7 +118,7 @@ export class OpenAiCompatibleAdapter implements LlmAdapter {
     let res: Response;
     try {
       const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 30_000);
+      const timeout = setTimeout(() => controller.abort(), 60_000);
       res = await fetch(url, {
         method: 'POST',
         headers: {
@@ -103,7 +132,7 @@ export class OpenAiCompatibleAdapter implements LlmAdapter {
           model: this.model,
           messages,
           temperature: options?.temperature ?? 0.7,
-          max_tokens: options?.maxTokens ?? 2048,
+          max_tokens: options?.maxTokens ?? 4096,
           stream,
         }),
         signal: controller.signal as any,
@@ -111,7 +140,7 @@ export class OpenAiCompatibleAdapter implements LlmAdapter {
       clearTimeout(timeout);
     } catch (err) {
       if (err instanceof Error && err.name === 'AbortError') {
-        this.logger.error('LLM 请求超时(30s)');
+        this.logger.error('LLM 请求超时(60s)');
         throw new Error('LLM 请求超时，请稍后重试');
       }
       this.logger.error(`LLM 网络请求异常: ${(err as Error).message}`);

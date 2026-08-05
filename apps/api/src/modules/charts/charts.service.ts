@@ -218,4 +218,65 @@ export class ChartsService {
       isLeapMonth: birth.isLeapMonth,
     };
   }
+
+  /**
+   * 批量修复所有旧版 chart 数据（补齐 twelveStage 等新字段）。
+   * 可通过管理接口或应用启动时调用。
+   */
+  async migrateAllCharts(): Promise<{ fixed: number; failed: number; skipped: number }> {
+    const charts = await this.prisma.chart.findMany({
+      include: { profile: true },
+    });
+
+    let fixed = 0;
+    let failed = 0;
+    let skipped = 0;
+
+    for (const chart of charts) {
+      const baziChart = chart.chartJson as any;
+      const needsFix =
+        chart.engineVersion !== ENGINE_VERSION ||
+        !baziChart?.pillars?.day?.twelveStage;
+
+      if (!needsFix) {
+        skipped++;
+        continue;
+      }
+
+      try {
+        const birth = this.profiles.decryptBirth(chart.profile.birthDatetimeEnc);
+        const input = this.toBirthInput(
+          birth,
+          chart.profile.gender as 'male' | 'female',
+          chart.profile.longitude,
+          chart.profile.latitude,
+          chart.profile.useTrueSolarTime,
+        );
+        const recalculated = calculateBazi(input);
+        const newInputHash = this.crypto.hash(`${ENGINE_VERSION}:${JSON.stringify(input)}`);
+
+        await this.prisma.chart.update({
+          where: { id: chart.id },
+          data: {
+            engineVersion: ENGINE_VERSION,
+            chartJson: recalculated as unknown as object,
+            inputHash: newInputHash,
+          },
+        });
+
+        // 更新 Redis 缓存
+        const cacheKey = `chart:${newInputHash}`;
+        await this.redis.set(cacheKey, JSON.stringify(recalculated), ChartsService.CACHE_TTL);
+
+        this.logger.log(`修复命盘 ${chart.id}: ${baziChart?.pillars?.day?.twelveStage || '缺失'} → ${recalculated.pillars.day.twelveStage}`);
+        fixed++;
+      } catch (err) {
+        this.logger.warn(`命盘 ${chart.id} 修复失败: ${err instanceof Error ? err.message : err}`);
+        failed++;
+      }
+    }
+
+    this.logger.log(`批量迁移完成: 修复 ${fixed}, 跳过 ${skipped}, 失败 ${failed}`);
+    return { fixed, failed, skipped };
+  }
 }

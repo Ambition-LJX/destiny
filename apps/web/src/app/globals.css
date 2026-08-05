@@ -50,6 +50,91 @@ body {
   }
 }
 
+/* 卡片顶部彩条流动动画 */
+@keyframes card-flow {
+  0% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: 0% 50%;
+  }
+}
+
+/* 导航栏光条流动动画 */
+@keyframes nav-flow {
+  0% {
+    transform: translateX(-100%);
+    opacity: 0;
+  }
+  20% {
+    opacity: 1;
+  }
+  80% {
+    opacity: 1;
+  }
+  100% {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+}
+
+/* Logo 光晕呼吸动画 */
+@keyframes logo-glow {
+  0%, 100% {
+    box-shadow: 0 0 15px rgba(63, 163, 77, 0.15);
+  }
+  50% {
+    box-shadow: 0 0 25px rgba(63, 163, 77, 0.35);
+  }
+}
+
+@keyframes logo-glow-dark {
+  0%, 100% {
+    box-shadow: 0 0 20px rgba(63, 163, 77, 0.2);
+  }
+  50% {
+    box-shadow: 0 0 35px rgba(63, 163, 77, 0.5);
+  }
+}
+
+/* 动画类定义 - 确保 Tailwind 能编译到 */
+.animate-nav-flow {
+  animation: nav-flow 3s ease-in-out infinite;
+}
+
+.animate-nav-flow-slow {
+  animation: nav-flow 4s ease-in-out infinite;
+}
+
+.animate-logo-glow {
+  animation: logo-glow 3s ease-in-out infinite;
+}
+
+.dark .animate-logo-glow {
+  animation: logo-glow-dark 3s ease-in-out infinite;
+}
+
+/* 导航栏背景缓慢流动 */
+@keyframes nav-bg-flow {
+  0% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: 0% 50%;
+  }
+}
+
+.animate-nav-bg-flow {
+  background-size: 200% 200%;
+  animation: nav-bg-flow 20s ease-in-out infinite;
+}
+
 @keyframes wuxing-glow {
   0%, 100% {
     opacity: 0.6;
@@ -57,6 +142,68 @@ body {
   50% {
     opacity: 1;
   }
+}
+
+/* Hero 背景装饰——五行光晕缓慢漂移 */
+@keyframes hero-drift {
+  0%, 100% {
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+  50% {
+    transform: translate3d(0, -20px, 0) scale(1.05);
+  }
+}
+
+.animate-hero-drift {
+  animation: hero-drift 9s ease-in-out infinite;
+}
+
+/* Hero 标题流光扫过 */
+@keyframes hero-shine {
+  0% {
+    background-position: -200% 50%;
+  }
+  100% {
+    background-position: 200% 50%;
+  }
+}
+
+.animate-hero-shine {
+  background-size: 200% auto;
+  animation: hero-shine 6s linear infinite;
+}
+
+/* 元素光点呼吸 */
+@keyframes elem-pulse {
+  0%, 100% {
+    transform: scale(1);
+    opacity: 0.75;
+  }
+  50% {
+    transform: scale(1.15);
+    opacity: 1;
+  }
+}
+
+.animate-elem-pulse {
+  animation: elem-pulse 2.8s ease-in-out infinite;
+}
+
+/* 元素卡片入场 */
+@keyframes elem-rise {
+  0% {
+    opacity: 0;
+    transform: translateY(18px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-elem-rise {
+  animation: elem-rise 0.6s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  opacity: 1;
 }
 
 .wuxing-nav-bg {
@@ -86,16 +233,39 @@ body {
     @apply border-wood/30 bg-ink-900 text-ink-200 hover:border-wood/50 hover:bg-wood/10;
   }
   .card {
-    @apply relative overflow-hidden rounded-2xl border border-ink-100 bg-white/90 p-6 shadow-card backdrop-blur-sm;
+    @apply relative overflow-hidden rounded-2xl border border-ink-100 bg-white/90 p-6 shadow-card backdrop-blur-sm transition-all duration-300 ease-out;
+    &:hover {
+      @apply shadow-lg -translate-y-0.5;
+      box-shadow: 0 10px 30px -10px rgba(0, 0, 0, 0.1);
+    }
   }
+  /* 顶部流动彩条 */
   .card::before {
     content: '';
-    @apply absolute inset-x-0 top-0 h-[3px] opacity-70;
-    /* 默认为五行渐变彩条；单个维度卡片可通过 --card-accent 变量覆盖为对应五行强调色 */
+    @apply absolute inset-x-0 top-0 h-[3px] opacity-80;
     background: var(--card-accent, linear-gradient(to right, #3fa34d, #e5484d, #c8952f, #d4af37, #3b82f6));
+    background-size: 200% 100%;
+    animation: card-flow 5s linear infinite;
+  }
+  /* 底部柔和光晕（呼吸感） */
+  .card::after {
+    content: '';
+    @apply absolute inset-x-0 bottom-0 h-1/3 pointer-events-none;
+    background: linear-gradient(to top, rgba(63, 163, 77, 0.05), transparent);
+    transition: opacity 0.3s ease;
+  }
+  .card:hover::after {
+    background: linear-gradient(to top, rgba(232, 72, 77, 0.08), transparent);
+  }
+  /* 管理后台等场景不需要顶部彩条时使用 */
+  .card-accent-none::before {
+    display: none;
   }
   .dark .card {
     @apply border-ink-800 bg-ink-900/90 shadow-none;
+    &:hover {
+      box-shadow: 0 10px 30px -10px rgba(0, 0, 0, 0.5);
+    }
   }
   .input {
     @apply w-full rounded-lg border border-ink-200 bg-white px-3 py-2 text-sm text-ink-900 outline-none transition focus:border-wood/60 focus:ring-2 focus:ring-wood/10;

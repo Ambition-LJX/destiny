@@ -17,13 +17,40 @@ model User {
   id           String    @id @default(uuid())
   email        String    @unique
   passwordHash String    @map("password_hash")
+  /// 角色：user（普通用户）| admin（普通管理员）| super_admin（超级管理员）
+  role         String    @default("user")
+  /// 封禁时间，非空表示已封禁
+  bannedAt     DateTime? @map("banned_at")
   createdAt    DateTime  @default(now()) @map("created_at")
   updatedAt    DateTime  @updatedAt @map("updated_at")
   deletedAt    DateTime? @map("deleted_at")
 
-  profiles Profile[]
+  profiles  Profile[]
+  quota     UserQuota?
+  payOrders PayOrder[]
+  adminLogs AdminLog[]
 
   @@map("users")
+}
+
+/// 管理员审计日志（高风险操作留痕：订单确认、用户封禁、角色变更等）
+model AdminLog {
+  id              String    @id @default(uuid())
+  adminId         String    @map("admin_id")
+  adminEmail      String    @map("admin_email")
+  /// 操作类型：order_confirm / order_cancel / user_ban / user_unban / quota_reset / pro_grant / pro_revoke / role_set / role_unset ...
+  action          String
+  targetUserId    String?   @map("target_user_id")
+  targetUserEmail String?   @map("target_user_email")
+  targetOrderId   String?   @map("target_order_id")
+  detail          String?   @db.Text
+  createdAt       DateTime  @default(now()) @map("created_at")
+
+  admin User @relation(fields: [adminId], references: [id], onDelete: Cascade)
+
+  @@index([adminId])
+  @@index([createdAt])
+  @@map("admin_logs")
 }
 
 /// 命盘档案（一个账户可管理多个人的命盘）
@@ -64,6 +91,7 @@ model Chart {
 
   profile Profile  @relation(fields: [profileId], references: [id], onDelete: Cascade)
   reports Report[]
+  messages ChatMessage[]
 
   @@index([profileId])
   @@index([inputHash])
@@ -72,17 +100,36 @@ model Chart {
 
 /// AI 解读报告
 model Report {
-  id           String   @id @default(uuid())
-  chartId      String   @map("chart_id")
-  dimension    String // 报告维度：personality/career/wealth/...
-  content      String   @db.Text
-  modelVersion String   @map("model_version")
-  createdAt    DateTime @default(now()) @map("created_at")
+  id               String   @id @default(uuid())
+  chartId          String   @map("chart_id")
+  dimension        String // 报告维度：personality/career/wealth/...
+  content          String   @db.Text
+  modelVersion     String   @map("model_version")
+  /// 当次 LLM 调用的 token 用量（仅非流式路径有值，用于成本核算）
+  promptTokens     Int?     @map("prompt_tokens")
+  completionTokens Int?     @map("completion_tokens")
+  totalTokens      Int?     @map("total_tokens")
+  createdAt        DateTime @default(now()) @map("created_at")
 
   chart Chart @relation(fields: [chartId], references: [id], onDelete: Cascade)
 
   @@index([chartId])
+  @@index([createdAt])
   @@map("reports")
+}
+
+/// 命盘问答历史（持久化记忆，刷新后仍可恢复）
+model ChatMessage {
+  id        String   @id @default(uuid())
+  chartId   String   @map("chart_id")
+  role      String // user / assistant
+  content   String   @db.Text
+  createdAt DateTime @default(now()) @map("created_at")
+
+  chart Chart @relation(fields: [chartId], references: [id], onDelete: Cascade)
+
+  @@index([chartId, createdAt])
+  @@map("chat_messages")
 }
 
 /// RAG 命理知识库
@@ -96,4 +143,58 @@ model KnowledgeChunk {
 
   @@index([topic])
   @@map("knowledge_chunks")
+}
+
+/// 解锁订单（扫码代收，人工确认后开通完整版）
+model PayOrder {
+  id        String    @id @default(uuid())
+  userId    String    @map("user_id")
+  /// 订单号（展示给用户，用于人工对账）
+  orderNo   String    @unique @map("order_no")
+  /// 金额（人民币）
+  amount    Decimal   @map("amount")
+  /// 解锁类型：unlock（完整版解锁）
+  type      String    @default("unlock")
+  /// 状态：pending（待付款/待确认）| paid（已开通）| cancelled（已取消）| refunded（已退款）
+  status    String    @default("pending")
+  paidAt    DateTime? @map("paid_at")
+  /// 内部备注（管理员填写，如"已微信核对"/"已退款"）
+  note      String?   @db.Text
+  createdAt DateTime  @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([status])
+  @@index([createdAt])
+  @@map("pay_orders")
+}
+
+/// 用户额度与消耗（按月计量）
+model UserQuota {
+  id                String    @id @default(uuid())
+  userId            String    @unique @map("user_id")
+  /// 套餐：free | pro
+  plan              String    @default("free")
+  /// 完整版到期时间（null 表示永久）。到期后自动降级为 free
+  proExpiresAt      DateTime? @map("pro_expires_at")
+  /// 免费每月可生成的"整体概览解读"次数（引流钩子）
+  freeOverviewCalls Int       @default(1) @map("free_overview_calls")
+  usedOverviewCalls Int       @default(0) @map("used_overview_calls")
+  /// 完整版维度报告调用计数（仅 pro 使用，用于统计）
+  usedReportCalls   Int       @default(0) @map("used_report_calls")
+  /// 问答调用计数（仅 pro 使用，用于统计）
+  usedAskCalls      Int       @default(0) @map("used_ask_calls")
+  /// 累计消耗（不重置，用于成本核算；单位：人民币）
+  lifetimeTokens    BigInt    @default(0) @map("lifetime_tokens")
+  lifetimeCost      Decimal   @default(0) @map("lifetime_cost")
+  /// 当前额度周期，形如 "2026-08"，用于识别重置周期
+  monthKey          String    @default("") @map("month_key")
+  createdAt         DateTime  @default(now()) @map("created_at")
+  updatedAt         DateTime  @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("user_quotas")
 }

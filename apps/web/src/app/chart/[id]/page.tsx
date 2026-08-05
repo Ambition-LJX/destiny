@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type RefObject } from 'react';
 import { useParams } from 'next/navigation';
 import { NavBar } from '@/components/NavBar';
 import { Disclaimer } from '@/components/Disclaimer';
@@ -15,6 +15,7 @@ import { LuckTimeline } from '@/features/chart/LuckTimeline';
 import { OverviewPanel } from '@/features/chart/OverviewPanel';
 import { ReportPanel } from '@/features/report/ReportPanel';
 import { ChatPanel } from '@/features/chat/ChatPanel';
+import { useBillingStore } from '@/lib/billingStore';
 
 /**
  * 命盘详情页：四柱、五行、大运时间轴、AI 报告、命盘问答。
@@ -27,9 +28,25 @@ export default function ChartPage() {
   const [result, setResult] = useState<ChartResult | null>(null);
   const [error, setError] = useState('');
   const [tab, setTab] = useState<'chart' | 'report' | 'chat'>('chart');
+  const refreshBilling = useBillingStore((s) => s.refresh);
 
-  // 命盘区域的 ref（用于 html2canvas 截图导出）
+  // 各 tab 的 ref（用于 html2canvas 截图导出）
   const chartRef = useRef<HTMLDivElement>(null);
+  const reportRef = useRef<HTMLDivElement>(null);
+  const chatRef = useRef<HTMLDivElement>(null);
+
+  // 根据当前 tab 选择正确的 ref
+  const getActiveRef = (): RefObject<HTMLDivElement> => {
+    switch (tab) {
+      case 'report': return reportRef;
+      case 'chat': return chatRef;
+      default: return chartRef;
+    }
+  };
+
+  useEffect(() => {
+    if (authed) refreshBilling();
+  }, [authed, refreshBilling]);
 
   useEffect(() => {
     if (!authed) return;
@@ -53,7 +70,7 @@ export default function ChartPage() {
   return (
     <div className="min-h-screen">
       <NavBar />
-      <main className="mx-auto max-w-5xl px-4 py-8">
+      <main className="mx-auto max-w-5xl px-4 py-8 sm:px-8">
         {error && <p className="text-sm text-fire">{error}</p>}
 
         {!result && !error && (
@@ -62,22 +79,54 @@ export default function ChartPage() {
 
         {result && (
           <>
-            <div className="flex flex-wrap items-end justify-between gap-3">
-              <ChartHeader chart={result.chart} />
-              <div className="flex items-center gap-2">
-                <ExportButton targetRef={chartRef} zodiac={result.chart.zodiac} />
-                <span className="rounded-full bg-ink-100 px-3 py-1 text-xs text-ink-500 dark:bg-ink-800 dark:text-ink-400">
-                  引擎版本 v{result.chart.engineVersion}
-                </span>
+            {/* 头部命盘档案卡 */}
+            <div className="card !bg-gradient-to-br !from-ink-50/80 !to-wood/5 dark:!from-ink-900 dark:!to-wood/10 border-none relative overflow-hidden !p-6">
+              <div className="absolute -right-10 -top-10 h-40 w-40 rounded-full bg-wood/10 blur-3xl dark:bg-wood/20" />
+              <div className="absolute -bottom-10 -left-10 h-40 w-40 rounded-full bg-fire/10 blur-3xl dark:bg-fire/20" />
+              <div className="relative z-10 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <h1 className="font-serif text-3xl font-bold tracking-wider text-ink-900 dark:text-ink-100">
+                    {result.chart.pillars.year.heavenlyStem}
+                    {result.chart.pillars.year.earthlyBranch}{' '}
+                    {result.chart.pillars.month.heavenlyStem}
+                    {result.chart.pillars.month.earthlyBranch}{' '}
+                    {result.chart.pillars.day.heavenlyStem}
+                    {result.chart.pillars.day.earthlyBranch}{' '}
+                    {result.chart.pillars.hour
+                      ? `${result.chart.pillars.hour.heavenlyStem}${result.chart.pillars.hour.earthlyBranch}`
+                      : '（时辰未知）'}
+                  </h1>
+                  <div className="mt-3 flex flex-wrap items-center gap-2 text-sm text-ink-600 dark:text-ink-400">
+                    <span className="flex items-center gap-1 rounded-full bg-earth/10 px-2 py-0.5 text-earth dark:bg-earth/20">
+                      🐾 生肖属 {result.chart.zodiac}
+                    </span>
+                    <span className="flex items-center gap-1 rounded-full bg-metal/10 px-2 py-0.5 text-metal dark:bg-metal/20">
+                      {result.chart.meta.gender === 'male' ? '♂ 男命' : '♀ 女命'}
+                    </span>
+                    {result.chart.meta.trueSolarTimeApplied && (
+                      <span className="flex items-center gap-1 rounded-full bg-water/10 px-2 py-0.5 text-water dark:bg-water/20">
+                        ☀️ 真太阳时 {result.chart.meta.trueSolarCorrectionMinutes > 0 ? '+' : ''}
+                        {result.chart.meta.trueSolarCorrectionMinutes} 分
+                      </span>
+                    )}
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 self-start sm:self-center">
+                  <ExportButton getTarget={() => getActiveRef().current} zodiac={result.chart.zodiac} />
+                  <span className="rounded-full border border-ink-200 bg-white/50 px-3 py-1 text-xs text-ink-500 backdrop-blur-sm dark:border-ink-700 dark:bg-ink-800/50 dark:text-ink-400">
+                    v{result.chart.engineVersion}
+                  </span>
+                </div>
               </div>
             </div>
 
-            <div className="mt-6 flex gap-2 border-b border-ink-100 dark:border-ink-800">
+            {/* Tabs */}
+            <div className="mt-6 flex gap-2 rounded-full border border-ink-200 bg-white/50 p-1 backdrop-blur-sm dark:border-ink-800 dark:bg-ink-900/50">
               <Tab active={tab === 'chart'} onClick={() => setTab('chart')} accent="wood">
-                命盘
+                命盘详解
               </Tab>
               <Tab active={tab === 'report'} onClick={() => setTab('report')} accent="fire">
-                AI 解读
+                AI 智能解读
               </Tab>
               <Tab active={tab === 'chat'} onClick={() => setTab('chat')} accent="water">
                 命盘问答
@@ -100,27 +149,26 @@ export default function ChartPage() {
               <section className="card">
                 <h2 className="mb-4 text-lg font-semibold text-ink-900 dark:text-ink-100">五行力量</h2>
                 <FiveElementsChart chart={result.chart} />
-                {result.chart.fiveElements.missingElements.length > 0 && (
-                  <p className="mt-3 rounded-lg border border-wood/40 bg-wood/5 px-3 py-2 text-xs text-ink-600 dark:border-wood/30 dark:bg-wood/10 dark:text-ink-300">
-                    💡 命局五行缺失：
-                    <b className="ml-1 text-ink-900 dark:text-ink-100">
-                      {result.chart.fiveElements.missingElements.join('、')}
-                    </b>
-                    ，对应领域可能偏弱，可通过方位/颜色/职业调候补救。
-                  </p>
-                )}
-                {result.chart.dayXunKong.length > 0 && (
-                  <p className="mt-2 text-xs text-ink-500 dark:text-ink-400">
-                    日柱旬空（空亡）：
-                    <b className="ml-1 text-ink-700 dark:text-ink-300">
-                      {result.chart.dayXunKong.join('、')}
-                    </b>
-                  </p>
-                )}
-                {result.chart.mingGong && (
-                  <p className="mt-1 text-xs text-ink-500 dark:text-ink-400">
-                    命宫：<b className="ml-1 text-ink-700 dark:text-ink-300">{result.chart.mingGong}</b>
-                  </p>
+                {(result.chart.fiveElements.missingElements.length > 0 ||
+                  result.chart.dayXunKong.length > 0 ||
+                  result.chart.mingGong) && (
+                  <div className="mt-4 flex flex-wrap items-center gap-3 border-t border-ink-100 pt-4 dark:border-ink-800">
+                    {result.chart.fiveElements.missingElements.length > 0 && (
+                      <span className="flex items-center gap-1 rounded-md bg-earth/10 px-2 py-1 text-xs text-earth dark:bg-earth/20">
+                        <span>💡</span> 缺失：{result.chart.fiveElements.missingElements.join('、')}
+                      </span>
+                    )}
+                    {result.chart.dayXunKong.length > 0 && (
+                      <span className="flex items-center gap-1 rounded-md bg-metal/10 px-2 py-1 text-xs text-metal dark:bg-metal/20">
+                        <span>⚪</span> 旬空：{result.chart.dayXunKong.join('、')}
+                      </span>
+                    )}
+                    {result.chart.mingGong && (
+                      <span className="flex items-center gap-1 rounded-md bg-water/10 px-2 py-1 text-xs text-water dark:bg-water/20">
+                        <span>🏛️</span> 命宫：{result.chart.mingGong}
+                      </span>
+                    )}
+                  </div>
                 )}
               </section>
 
@@ -194,9 +242,15 @@ export default function ChartPage() {
               </div>
             </div>
 
-            {/* 其他 tab 内容 */}
-            {tab === 'report' && <ReportPanel chartId={chartId} />}
-            {tab === 'chat' && <ChatPanel chartId={chartId} />}
+            {/* AI 解读 tab 内容：始终渲染，供导出截图 */}
+            <div ref={reportRef} className="mt-6 space-y-4" hidden={tab !== 'report'}>
+              <ReportPanel chartId={chartId} />
+            </div>
+
+            {/* 命盘问答 tab 内容：始终渲染，供导出截图 */}
+            <div ref={chatRef} className="mt-6" hidden={tab !== 'chat'}>
+              <ChatPanel chartId={chartId} />
+            </div>
           </>
         )}
       </main>
@@ -204,32 +258,10 @@ export default function ChartPage() {
   );
 }
 
-function ChartHeader({ chart }: { chart: ChartResult['chart'] }) {
-  const p = chart.pillars;
-  const bazi = [
-    `${p.year.heavenlyStem}${p.year.earthlyBranch}`,
-    `${p.month.heavenlyStem}${p.month.earthlyBranch}`,
-    `${p.day.heavenlyStem}${p.day.earthlyBranch}`,
-    p.hour ? `${p.hour.heavenlyStem}${p.hour.earthlyBranch}` : '时辰未知',
-  ].join(' ');
-
-  return (
-    <div>
-      <h1 className="font-serif text-2xl font-bold text-ink-900 dark:text-ink-100">{bazi}</h1>
-      <p className="mt-1 text-sm text-ink-500 dark:text-ink-400">
-        生肖属{chart.zodiac} · {chart.meta.gender === 'male' ? '男命' : '女命'} ·
-        {chart.meta.trueSolarTimeApplied
-          ? ` 真太阳时校正 ${chart.meta.trueSolarCorrectionMinutes} 分`
-          : ' 未启用真太阳时'}
-      </p>
-    </div>
-  );
-}
-
 const TAB_ACTIVE_STYLES = {
-  wood: 'border-wood text-wood',
-  fire: 'border-fire text-fire',
-  water: 'border-water text-water',
+  wood: 'bg-wood text-white shadow-md shadow-wood/20',
+  fire: 'bg-fire text-white shadow-md shadow-fire/20',
+  water: 'bg-water text-white shadow-md shadow-water/20',
 } as const;
 
 function Tab({
@@ -246,10 +278,10 @@ function Tab({
   return (
     <button
       onClick={onClick}
-      className={`-mb-px border-b-2 px-4 py-2 text-sm font-medium transition ${
+      className={`rounded-full px-4 py-1.5 text-sm font-medium transition-all ${
         active
           ? TAB_ACTIVE_STYLES[accent]
-          : 'border-transparent text-ink-400 hover:text-ink-600 dark:text-ink-500 dark:hover:text-ink-300'
+          : 'text-ink-500 hover:bg-ink-100 hover:text-ink-800 dark:text-ink-400 dark:hover:bg-ink-800 dark:hover:text-ink-100'
       }`}
     >
       {children}

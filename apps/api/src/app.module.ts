@@ -11,6 +11,8 @@ import { ProfilesModule } from './modules/profiles/profiles.module';
 import { ChartsModule } from './modules/charts/charts.module';
 import { AiModule } from './modules/ai/ai.module';
 import { ReportsModule } from './modules/reports/reports.module';
+import { BillingModule } from './modules/billing/billing.module';
+import { AdminModule } from './modules/admin/admin.module';
 import { HealthController } from './health.controller';
 
 /**
@@ -41,6 +43,8 @@ import { HealthController } from './health.controller';
     ChartsModule,
     AiModule,
     ReportsModule,
+    BillingModule,
+    AdminModule,
   ],
   controllers: [HealthController],
   providers: [

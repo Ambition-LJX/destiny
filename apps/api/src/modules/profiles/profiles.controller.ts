@@ -8,6 +8,7 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { NotBannedGuard } from '../auth/guards/not-banned.guard';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import type { AuthUser } from '../../common/dto/auth.types';
 import { ProfilesService } from './profiles.service';
@@ -22,6 +23,7 @@ export class ProfilesController {
   constructor(private readonly profiles: ProfilesService) {}
 
   @Post()
+  @UseGuards(NotBannedGuard)
   create(@CurrentUser() user: AuthUser, @Body() dto: CreateProfileDto) {
     return this.profiles.create(user.userId, dto);
   }
@@ -42,6 +44,7 @@ export class ProfilesController {
   }
 
   @Delete(':id')
+  @UseGuards(NotBannedGuard)
   async remove(@CurrentUser() user: AuthUser, @Param('id') id: string) {
     await this.profiles.remove(user.userId, id);
     return { deleted: true };

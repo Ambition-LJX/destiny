@@ -1,9 +1,11 @@
 'use client';
 
 import { useRef, useState, useCallback, useEffect } from 'react';
-import { streamSse } from '@/lib/api';
+import { streamSse, reportApi } from '@/lib/api';
 import { RichText } from '../report/RichText';
 import { LoadingDots } from '@/components/LoadingDots';
+import { UnlockPrompt } from '@/components/UnlockPrompt';
+import { useBillingStore } from '@/lib/billingStore';
 
 interface Message {
   role: 'user' | 'assistant';
@@ -16,6 +18,7 @@ interface Message {
  * 支持：停止生成、加载状态动画、字符计数、耗时显示。
  */
 export function ChatPanel({ chartId }: { chartId: string }) {
+  const plan = useBillingStore((s) => s.plan);
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [busy, setBusy] = useState(false);
@@ -23,6 +26,29 @@ export function ChatPanel({ chartId }: { chartId: string }) {
   const listRef = useRef<HTMLDivElement>(null);
   const abortRef = useRef<AbortController | null>(null);
   const startTimeRef = useRef<number>(0);
+
+  // 挂载时加载该命盘的问答历史（持久化记忆，刷新后恢复）
+  useEffect(() => {
+    let cancelled = false;
+    reportApi
+      .chatList(chartId)
+      .then((list) => {
+        if (cancelled) return;
+        setMessages(
+          list.map((m) => ({
+            role: m.role,
+            content: m.content,
+            timestamp: new Date(m.createdAt).getTime(),
+          })),
+        );
+      })
+      .catch(() => {
+        /* 无历史或加载失败时保持空会话 */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [chartId]);
 
   // 更新耗时计时器
   useEffect(() => {
@@ -55,7 +81,6 @@ export function ChatPanel({ chartId }: { chartId: string }) {
     const question = input.trim();
     if (!question || busy) return;
 
-    const history = messages.slice(-6);
     const newMessages: Message[] = [
       ...messages,
       { role: 'user', content: question, timestamp: Date.now() },
@@ -71,7 +96,7 @@ export function ChatPanel({ chartId }: { chartId: string }) {
     try {
       await streamSse(
         '/reports/ask',
-        { method: 'POST', body: { chartId, question, history } },
+        { method: 'POST', body: { chartId, question } },
         {
           onDelta: (text) =>
             setMessages((prev) => {
@@ -137,6 +162,16 @@ export function ChatPanel({ chartId }: { chartId: string }) {
 
   return (
     <div className="card flex h-[520px] flex-col">
+      {plan === 'free' && (
+        <div className="flex flex-1 items-center justify-center">
+          <UnlockPrompt
+            title="命盘问答需解锁"
+            desc="可围绕你的命盘无限次追问：事业、财运、婚恋、健康、流年等。"
+          />
+        </div>
+      )}
+
+      {plan !== 'free' && (<>
       <div className="mb-3 flex items-center justify-between">
         <h2 className="text-lg font-semibold text-ink-900 dark:text-ink-100">命盘问答</h2>
         {busy && (
@@ -234,6 +269,7 @@ export function ChatPanel({ chartId }: { chartId: string }) {
           </button>
         )}
       </div>
+      </>)}
     </div>
   );
 }

@@ -31,6 +31,10 @@ export class AuthService {
     const user = await this.prisma.user.create({
       data: { email: dto.email, passwordHash },
     });
+    // 预建额度记录（免费套餐），保证后续额度查询/计量始终存在
+    await this.prisma.userQuota.create({
+      data: { userId: user.id },
+    });
     return this.issueTokens(user.id, user.email);
   }
 

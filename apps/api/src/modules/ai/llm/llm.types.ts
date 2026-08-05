@@ -25,6 +25,10 @@ export interface LlmUsage {
   promptTokens: number;
   completionTokens: number;
   totalTokens: number;
+  /** 输入中命中 prompt 缓存的 token 数（DeepSeek 等返回 prompt_cache_hit_tokens） */
+  promptCacheHitTokens?: number;
+  /** 输入中未命中缓存的 token 数（DeepSeek 等返回 prompt_cache_miss_tokens） */
+  promptCacheMissTokens?: number;
 }
 
 /** 调用元数据：耗时、是否命中缓存、是否使用 mock 等 */

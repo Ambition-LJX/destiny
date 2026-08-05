@@ -118,46 +118,62 @@ export default function DashboardPage() {
         ) : (
           <div className="mt-6 space-y-3">
             {profiles.map((p, i) => {
-              const accentBorders = [
-                'border-l-wood',
-                'border-l-fire',
-                'border-l-earth',
-                'border-l-metal',
-                'border-l-water',
+              const cardColors = [
+                'hover:border-wood/50 hover:shadow-wood/10',
+                'hover:border-fire/50 hover:shadow-fire/10',
+                'hover:border-earth/50 hover:shadow-earth/10',
+                'hover:border-metal/50 hover:shadow-metal/10',
+                'hover:border-water/50 hover:shadow-water/10',
               ];
-              const accent = accentBorders[i % accentBorders.length];
+              const accent = cardColors[i % cardColors.length];
               return (
                 <div
                   key={p.id}
-                  className={`card flex items-center justify-between gap-4 border-l-4 py-4 ${accent}`}
+                  className={`card flex items-center justify-between gap-4 border border-ink-100 bg-white/50 p-4 transition-all duration-300 hover:shadow-md dark:border-ink-800 dark:bg-ink-900/50 ${accent}`}
                 >
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <span className="font-medium text-ink-900 dark:text-ink-100">{p.name}</span>
-                      <span className="rounded-full bg-ink-100 px-2 py-0.5 text-xs text-ink-500 dark:bg-ink-800 dark:text-ink-400">
-                        {p.gender === 'male' ? '男' : '女'}
-                      </span>
+                  {/* 左侧：档案信息 */}
+                  <div className="flex items-center gap-4">
+                    {/* 性别图标：男蓝女红 */}
+                    <div
+                      className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-full text-xl ${
+                        p.gender === 'male'
+                          ? 'bg-blue-100 text-blue-600 dark:bg-blue-900/40 dark:text-blue-400'
+                          : 'bg-pink-100 text-pink-600 dark:bg-pink-900/40 dark:text-pink-400'
+                      }`}
+                    >
+                      {p.gender === 'male' ? '♂' : '♀'}
                     </div>
-                    <p className="mt-1 text-sm text-ink-500 dark:text-ink-400">
-                      {p.calendar === 'solar' ? '公历' : '农历'} {p.year}-{p.month}-
-                      {p.day}
-                      {p.hourKnown ? ` ${p.hour}:${String(p.minute).padStart(2, '0')}` : ' 时辰未知'}
-                    </p>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-base font-semibold text-ink-900 dark:text-ink-100">{p.name}</span>
+                        <span className="rounded-full bg-ink-100 px-2 py-0.5 text-xs text-ink-500 dark:bg-ink-800 dark:text-ink-400">
+                          {p.gender === 'male' ? '男命' : '女命'}
+                        </span>
+                      </div>
+                      <p className="mt-1 text-sm text-ink-500 dark:text-ink-400">
+                        <span className="mr-1">{p.calendar === 'solar' ? '公历' : '农历'}</span>
+                        {p.year}-{String(p.month).padStart(2, '0')}-{String(p.day).padStart(2, '0')}
+                        {p.hourKnown ? ` ${String(p.hour).padStart(2, '0')}:${String(p.minute).padStart(2, '0')}` : ' 时辰未知'}
+                      </p>
+                    </div>
                   </div>
-                  <div className="flex shrink-0 gap-2">
+
+                  {/* 右侧：操作按钮 */}
+                  <div className="flex shrink-0 items-center gap-2">
                     <button
-                      className="btn-primary"
+                      className="btn-primary !py-2 !px-4"
                       onClick={() => openChart(p.id)}
                       disabled={busyId === p.id}
                     >
                       {busyId === p.id ? '处理中…' : '查看命盘'}
                     </button>
                     <button
-                      className="btn-ghost text-fire"
+                      className="btn-ghost !py-2 !px-3 text-fire hover:bg-fire/10 dark:hover:bg-fire/20"
                       onClick={() => remove(p.id)}
                       disabled={busyId === p.id}
+                      title="删除档案"
                     >
-                      删除
+                      ✕
                     </button>
                   </div>
                 </div>

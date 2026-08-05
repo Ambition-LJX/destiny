@@ -24,7 +24,7 @@ export function LuckTimeline({ chart }: { chart: BaziChart }) {
           return (
             <div
               key={cycle.index}
-              className={`min-w-[92px] flex-1 rounded-xl border px-3 py-3 text-center transition ${
+              className={`w-[96px] shrink-0 rounded-xl border px-3 py-3 text-center transition ${
                 active
                   ? 'border-ink-900 bg-ink-900 text-white shadow-card'
                   : 'border-ink-100 bg-white'

@@ -7,6 +7,8 @@ import type { ReportDimension, StoredReport } from '@/lib/types';
 import { RichText } from './RichText';
 import { ProgressBar } from '@/components/ProgressBar';
 import { LoadingDots } from '@/components/LoadingDots';
+import { UnlockPrompt } from '@/components/UnlockPrompt';
+import { useBillingStore } from '@/lib/billingStore';
 
 interface DimensionState {
   content: string;
@@ -57,6 +59,7 @@ function formatElapsed(ms: number): string {
  * 支持：单维度流式生成、一键生成（并发流式，限制并发数）、仅生成缺失项、重试失败项、重新生成、历史报告时间轴。
  */
 export function ReportPanel({ chartId }: { chartId: string }) {
+  const plan = useBillingStore((s) => s.plan);
   const [states, setStates] = useState<Record<string, DimensionState>>({});
   const [disclaimer, setDisclaimer] = useState<string>('');
   const [history, setHistory] = useState<Record<string, StoredReport[]>>({});
@@ -413,6 +416,16 @@ export function ReportPanel({ chartId }: { chartId: string }) {
 
   return (
     <div>
+      {/* 免费用户：维度报告为 pro 专属，展示解锁引导 */}
+      {plan === 'free' && (
+        <UnlockPrompt
+          title="AI 完整解读需解锁"
+          desc="包括性格、事业、财运、感情、健康、家庭、流年等全部维度的专业解读。解锁后无限次生成。"
+        />
+      )}
+
+      {plan !== 'free' && (
+        <>
       <div className="mb-4 flex items-center justify-between gap-3">
         <div>
           <h2 className="text-lg font-semibold text-ink-900 dark:text-ink-100">AI 命理解读</h2>
@@ -723,6 +736,8 @@ export function ReportPanel({ chartId }: { chartId: string }) {
           to { opacity: 1; transform: translateY(0); }
         }
       `}</style>
+        </>
+      )}
     </div>
   );
 }

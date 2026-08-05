@@ -39,9 +39,22 @@ export const DISCLAIMER =
 export const REPORT_TARGET_LENGTH = 450;
 export const REPORT_HARD_MAX_LENGTH = 800;
 
-/** 估算 Token 数（粗略：1 字 ≈ 1.5 token） */
+/**
+ * 离线的 token 估算，用于成本模型等无需精确计量的场景。
+ *
+ * 按 DeepSeek 官方换算比例估算（https://api-docs.deepseek.com/zh-cn/quick_start/token_usage）：
+ * - 1 个中文字符 ≈ 0.6 token
+ * - 1 个非中文（英文字符/数字/符号）≈ 0.3 token
+ * 实际以模型返回的 usage 为准，此处仅作成本估算参考。
+ */
 export function estimateTokens(text: string): number {
-  return Math.ceil(text.length * 1.5);
+  let cjk = 0;
+  let other = 0;
+  for (const ch of text) {
+    if (/[\u4e00-\u9fff\u3400-\u4dbf\uf900-\ufaff]/.test(ch)) cjk += 1;
+    else other += 1;
+  }
+  return Math.ceil(cjk * 0.6 + other * 0.3);
 }
 
 /**
@@ -71,7 +84,7 @@ export const STRUCTURED_OUTPUT_GUIDE =
  *
  * 核心：AI 只负责"讲"，绝不允许自行排盘或修改任何干支/五行数据。
  */
-const SYSTEM_CONSTRAINTS = `你是一位资深、严谨且富有同理心的八字命理解读顾问。你的职责是把"排盘引擎已经算好的结构化结果"翻译成通俗易懂、有温度的白话解读。
+export const SYSTEM_CONSTRAINTS = `你是一位资深、严谨且富有同理心的八字命理解读顾问。你的职责是把"排盘引擎已经算好的结构化结果"翻译成通俗易懂、有温度的白话解读。
 
 必须严格遵守以下硬性规则：
 1. 以下提供的排盘结果为唯一事实来源。你【绝对不得】重新排盘、重新计算或修改任何天干、地支、藏干、十神、五行、大运、流年、合冲、格局、十二长生、神煞等任何数据。

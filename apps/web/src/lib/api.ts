@@ -89,7 +89,7 @@ async function refreshTokens(): Promise<string | null> {
  * 统一请求封装，自动带上 access token 并解包 { code, message, data }。
  * 遇到 401 时用 refresh token 刷新后自动重试一次。
  */
-async function request<T>(
+export async function request<T>(
   path: string,
   options: RequestInit = {},
   retry = true,
@@ -193,8 +193,20 @@ export interface BatchGenerateResponse {
   llmMeta?: { provider: string; model: string; cacheHits: number; total: number };
 }
 
+/** 单条命盘问答历史记录 */
+export interface ChatMessageView {
+  role: 'user' | 'assistant';
+  content: string;
+  createdAt: string;
+}
+
 export const reportApi = {
   list: (chartId: string) => request<StoredReport[]>(`/reports/${chartId}`),
+  /**
+   * 读取某排盘的问答历史（刷新后恢复记忆）。
+   */
+  chatList: (chartId: string) =>
+    request<ChatMessageView[]>(`/reports/${chartId}/chat`),
   /**
    * 一次性生成全部（或指定）维度的报告。
    */
@@ -206,6 +218,257 @@ export const reportApi = {
       body: JSON.stringify(body),
     });
   },
+};
+
+/** 成本统计桶（成本单位：人民币） */
+export interface CostBucket {
+  calls: number;
+  promptTokens: number;
+  completionTokens: number;
+  totalTokens: number;
+  costCny: number;
+}
+
+/** 成本统计结果 */
+export interface CostStats {
+  today: CostBucket;
+  month: CostBucket;
+  total: CostBucket;
+  byModel: Array<{ model: string } & CostBucket>;
+  topUsers: Array<{
+    userId: string;
+    email: string;
+    plan: string;
+    lifetimeTokens: number;
+    lifetimeCost: number;
+    usedReportCalls: number;
+    usedAskCalls: number;
+  }>;
+}
+
+/**
+ * 管理接口（运营看板）。使用独立的管理员令牌（/admin/login 签发）。
+ */
+const ADMIN_ACCESS_KEY = 'destiny.adminAccessToken';
+
+/** 管理员令牌存取（与普通用户令牌完全隔离）。 */
+export const adminTokenStore = {
+  get get(): string | null {
+    if (typeof window === 'undefined') return null;
+    return localStorage.getItem(ADMIN_ACCESS_KEY);
+  },
+  set(token: string) {
+    localStorage.setItem(ADMIN_ACCESS_KEY, token);
+  },
+  clear() {
+    localStorage.removeItem(ADMIN_ACCESS_KEY);
+  },
+};
+
+/** 管理员请求封装：自动带管理员令牌，解包 { code, message, data }。 */
+export async function adminRequest<T>(
+  path: string,
+  options: RequestInit = {},
+): Promise<T> {
+  const headers = new Headers(options.headers);
+  headers.set('Content-Type', 'application/json');
+  const token = adminTokenStore.get;
+  if (token) headers.set('Authorization', `Bearer ${token}`);
+
+  const res = await fetch(`${API_BASE}${path}`, { ...options, headers });
+  const body = await res.text();
+  let json: ApiResponse<T>;
+  try {
+    json = JSON.parse(body) as ApiResponse<T>;
+  } catch {
+    throw new ApiError(`请求失败(${res.status})：${body.slice(0, 200)}`, res.status);
+  }
+  if (!res.ok || json.code !== 0) {
+    throw new ApiError(json.message || `请求失败(${res.status})`, res.status);
+  }
+  return json.data;
+}
+
+export interface AdminLoginResult {
+  accessToken: string;
+  admin: { userId: string; email: string; role: 'admin' | 'super_admin' };
+}
+
+export interface AdminUserView {
+  id: string;
+  email: string;
+  role: 'user' | 'admin' | 'super_admin';
+  bannedAt: string | null;
+  createdAt: string;
+  plan: 'free' | 'pro';
+  proExpiresAt: string | null;
+  overviewUsed: number;
+  overviewFree: number;
+  usedReportCalls: number;
+  usedAskCalls: number;
+  lifetimeTokens: number;
+  lifetimeCost: number;
+}
+
+export interface AdminUserList {
+  total: number;
+  page: number;
+  pageSize: number;
+  users: AdminUserView[];
+}
+
+export interface AdminOrderView {
+  id: string;
+  orderNo: string;
+  amount: number;
+  status: 'pending' | 'paid' | 'cancelled' | 'refunded';
+  email: string;
+  note: string | null;
+  paidAt: string | null;
+  createdAt: string;
+}
+
+export interface AdminOrderList {
+  total: number;
+  page: number;
+  pageSize: number;
+  orders: AdminOrderView[];
+}
+
+export interface AdminLogView {
+  id: string;
+  adminEmail: string;
+  action: string;
+  targetUserEmail: string | null;
+  targetOrderId: string | null;
+  detail: string | null;
+  createdAt: string;
+}
+
+export const adminApi = {
+  login: (email: string, password: string) =>
+    adminRequest<AdminLoginResult>('/admin/login', {
+      method: 'POST',
+      body: JSON.stringify({ email, password }),
+    }),
+  orders: (params: { status?: string; keyword?: string; dateFrom?: string; dateTo?: string; page?: number; pageSize?: number } = {}) => {
+    const qs = new URLSearchParams();
+    if (params.status) qs.set('status', params.status);
+    if (params.keyword) qs.set('keyword', params.keyword);
+    if (params.dateFrom) qs.set('dateFrom', params.dateFrom);
+    if (params.dateTo) qs.set('dateTo', params.dateTo);
+    if (params.page) qs.set('page', String(params.page));
+    if (params.pageSize) qs.set('pageSize', String(params.pageSize));
+    return adminRequest<AdminOrderList>(`/admin/orders?${qs.toString()}`);
+  },
+  createOrder: (params: { email: string; amount?: number; note?: string }) =>
+    adminRequest<AdminOrderView & { ok: boolean }>('/admin/orders', {
+      method: 'POST',
+      body: JSON.stringify(params),
+    }),
+  confirmOrder: (id: string) =>
+    adminRequest<{ ok: boolean }>(`/admin/orders/${id}/confirm`, { method: 'POST' }),
+  cancelOrder: (id: string) =>
+    adminRequest<{ ok: boolean }>(`/admin/orders/${id}/cancel`, { method: 'POST' }),
+  refundOrder: (id: string) =>
+    adminRequest<{ ok: boolean }>(`/admin/orders/${id}/refund`, { method: 'POST' }),
+  updateOrderNote: (id: string, note: string) =>
+    adminRequest<{ ok: boolean }>(`/admin/orders/${id}/note`, {
+      method: 'POST',
+      body: JSON.stringify({ note }),
+    }),
+  users: (params: { page?: number; pageSize?: number; keyword?: string } = {}) => {
+    const qs = new URLSearchParams();
+    if (params.page) qs.set('page', String(params.page));
+    if (params.pageSize) qs.set('pageSize', String(params.pageSize));
+    if (params.keyword) qs.set('keyword', params.keyword);
+    return adminRequest<AdminUserList>(`/admin/users?${qs.toString()}`);
+  },
+  ban: (id: string) =>
+    adminRequest<{ ok: boolean }>(`/admin/users/${id}/ban`, { method: 'POST' }),
+  unban: (id: string) =>
+    adminRequest<{ ok: boolean }>(`/admin/users/${id}/unban`, { method: 'POST' }),
+  resetQuota: (id: string) =>
+    adminRequest<{ ok: boolean }>(`/admin/users/${id}/reset-quota`, { method: 'POST' }),
+  grantPro: (id: string) =>
+    adminRequest<{ ok: boolean }>(`/admin/users/${id}/grant-pro`, { method: 'POST' }),
+  revokePro: (id: string) =>
+    adminRequest<{ ok: boolean }>(`/admin/users/${id}/revoke-pro`, { method: 'POST' }),
+  setAdmin: (id: string) =>
+    adminRequest<{ ok: boolean }>(`/admin/users/${id}/set-admin`, { method: 'POST' }),
+  unsetAdmin: (id: string) =>
+    adminRequest<{ ok: boolean }>(`/admin/users/${id}/unset-admin`, { method: 'POST' }),
+  logs: (page = 1, pageSize = 30) =>
+    adminRequest<{ total: number; page: number; pageSize: number; logs: AdminLogView[] }>(
+      `/admin/logs?page=${page}&pageSize=${pageSize}`,
+    ),
+  deleteLogs: (ids: string[]) =>
+    adminRequest<{ ok: boolean; deleted: number }>('/admin/logs/delete', {
+      method: 'POST',
+      body: JSON.stringify({ ids }),
+    }),
+  clearLogs: () =>
+    adminRequest<{ ok: boolean; deleted: number }>('/admin/logs/clear', {
+      method: 'POST',
+    }),
+  costStats: () => adminRequest<CostStats>('/admin/cost-stats'),
+};
+
+/** 用户额度信息 */
+export interface QuotaInfo {
+  plan: 'free' | 'pro';
+  proExpiresAt: string | null;
+  overview: { free: number; used: number };
+  report: { used: number };
+  ask: { used: number };
+}
+
+/**
+ * 额度接口。
+ */
+export const quotaApi = {
+  get: () => request<QuotaInfo>('/reports/quota'),
+};
+
+/** 解锁信息 */
+export interface UnlockInfo {
+  price: number;
+  currency: string;
+  qrWechat: string;
+  qrAlipay: string;
+  contact: string;
+  proDays: number;
+  enabled: boolean;
+}
+
+/** 解锁订单 */
+export interface PayOrder {
+  id: string;
+  orderNo: string;
+  amount: number;
+  status: 'pending' | 'paid' | 'cancelled';
+  paidAt: string | null;
+  createdAt: string;
+}
+
+/** 我的套餐状态 */
+export interface BillingStatus {
+  plan: 'free' | 'pro';
+  proExpiresAt: string | null;
+  overviewRemaining: number;
+  /** 是否已被封禁（软封禁：只读可用，写操作受限） */
+  banned?: boolean;
+}
+
+/**
+ * 解锁（充值）接口。
+ */
+export const billingApi = {
+  unlockInfo: () => request<UnlockInfo>('/billing/unlock-info'),
+  status: () => request<BillingStatus>('/billing/status'),
+  createOrder: () =>
+    request<PayOrder>('/billing/orders', { method: 'POST' }),
+  myOrders: () => request<PayOrder[]>('/billing/orders/mine'),
 };
 
 /**
@@ -232,24 +495,37 @@ export async function streamSse(
     return;
   }
 
-  const headers = new Headers();
-  const access = tokenStore.access;
-  if (access) headers.set('Authorization', `Bearer ${access}`);
-  if (init.body) headers.set('Content-Type', 'application/json');
-  if (init.headers) {
-    for (const [k, v] of Object.entries(init.headers)) {
-      headers.set(k, v);
+  // 统一构建请求头：自动带上 access token（兼容 401 刷新后更换 token）
+  const buildHeaders = (access: string | null): Headers => {
+    const headers = new Headers();
+    if (access) headers.set('Authorization', `Bearer ${access}`);
+    if (init.body) headers.set('Content-Type', 'application/json');
+    if (init.headers) {
+      for (const [k, v] of Object.entries(init.headers)) {
+        headers.set(k, v);
+      }
     }
-  }
+    return headers;
+  };
 
-  let res: Response;
-  try {
-    res = await fetch(`${API_BASE}${path}`, {
+  const doFetch = (access: string | null): Promise<Response> =>
+    fetch(`${API_BASE}${path}`, {
       method: init.method,
-      headers,
+      headers: buildHeaders(access),
       body: init.body ? JSON.stringify(init.body) : undefined,
       signal,
     });
+
+  let res: Response;
+  try {
+    res = await doFetch(tokenStore.access);
+    // 401：access token 可能已过期（15 分钟），用 refresh token 换发后重试一次
+    if (res.status === 401 && tokenStore.refresh) {
+      const access = await refreshTokens();
+      if (access) {
+        res = await doFetch(access);
+      }
+    }
   } catch (err) {
     // 处理中断或网络错误
     if (signal?.aborted || (err instanceof DOMException && err.name === 'AbortError')) {
