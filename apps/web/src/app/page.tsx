@@ -97,9 +97,9 @@ export default function HomePage() {
           <div className="mt-10 flex flex-wrap items-center justify-center gap-3">
             <Link
               href="/new"
-              className="group relative inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-wood via-earth to-fire px-7 py-3.5 text-sm font-semibold text-white shadow-lg shadow-wood/25 transition-all duration-300 hover:-translate-y-0.5 hover:shadow-xl hover:shadow-wood/40 sm:text-base"
+              className="group relative inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-earth via-metal to-fire px-7 py-3.5 text-sm font-semibold text-white shadow-lg shadow-earth/25 transition-all duration-300 hover:-translate-y-0.5 hover:shadow-xl hover:shadow-earth/40 sm:text-base"
             >
-              <span className="absolute inset-0 rounded-xl bg-gradient-to-r from-wood via-earth to-fire opacity-0 blur-md transition-opacity duration-500 group-hover:opacity-70" />
+              <span className="absolute inset-0 rounded-xl bg-gradient-to-r from-earth via-metal to-fire opacity-0 blur-md transition-opacity duration-500 group-hover:opacity-70" />
               <span className="relative">开始排盘</span>
               <svg
                 className="relative h-4 w-4 transition-transform group-hover:translate-x-0.5"

@@ -37,19 +37,6 @@ body {
   background-repeat: no-repeat;
 }
 
-/* 五行流动动画 */
-@keyframes wuxing-flow {
-  0% {
-    background-position: 0% 50%;
-  }
-  50% {
-    background-position: 100% 50%;
-  }
-  100% {
-    background-position: 0% 50%;
-  }
-}
-
 /* 卡片顶部彩条流动动画 */
 @keyframes card-flow {
   0% {
@@ -63,76 +50,57 @@ body {
   }
 }
 
-/* 导航栏光条流动动画 */
-@keyframes nav-flow {
+/* 导航栏顶部描金细线：流光划过一次后停顿，克制不聒噪 */
+@keyframes nav-shimmer {
   0% {
-    transform: translateX(-100%);
+    transform: translateX(-120%);
     opacity: 0;
   }
-  20% {
+  15% {
     opacity: 1;
   }
-  80% {
+  55% {
     opacity: 1;
+  }
+  70% {
+    transform: translateX(420%);
+    opacity: 0;
   }
   100% {
-    transform: translateX(100%);
+    transform: translateX(420%);
     opacity: 0;
   }
 }
 
-/* Logo 光晕呼吸动画 */
-@keyframes logo-glow {
+.animate-nav-shimmer {
+  animation: nav-shimmer 6s ease-in-out infinite;
+}
+
+/* 印玺光晕呼吸动画：墨金配色，替代此前偏木行绿的光晕 */
+@keyframes seal-glow {
   0%, 100% {
-    box-shadow: 0 0 15px rgba(63, 163, 77, 0.15);
+    box-shadow: 0 0 12px rgba(200, 149, 47, 0.18);
   }
   50% {
-    box-shadow: 0 0 25px rgba(63, 163, 77, 0.35);
+    box-shadow: 0 0 22px rgba(200, 149, 47, 0.38);
   }
 }
 
-@keyframes logo-glow-dark {
+@keyframes seal-glow-dark {
   0%, 100% {
-    box-shadow: 0 0 20px rgba(63, 163, 77, 0.2);
+    box-shadow: 0 0 16px rgba(212, 175, 55, 0.22);
   }
   50% {
-    box-shadow: 0 0 35px rgba(63, 163, 77, 0.5);
+    box-shadow: 0 0 28px rgba(212, 175, 55, 0.45);
   }
 }
 
-/* 动画类定义 - 确保 Tailwind 能编译到 */
-.animate-nav-flow {
-  animation: nav-flow 3s ease-in-out infinite;
+.animate-seal-glow {
+  animation: seal-glow 3.5s ease-in-out infinite;
 }
 
-.animate-nav-flow-slow {
-  animation: nav-flow 4s ease-in-out infinite;
-}
-
-.animate-logo-glow {
-  animation: logo-glow 3s ease-in-out infinite;
-}
-
-.dark .animate-logo-glow {
-  animation: logo-glow-dark 3s ease-in-out infinite;
-}
-
-/* 导航栏背景缓慢流动 */
-@keyframes nav-bg-flow {
-  0% {
-    background-position: 0% 50%;
-  }
-  50% {
-    background-position: 100% 50%;
-  }
-  100% {
-    background-position: 0% 50%;
-  }
-}
-
-.animate-nav-bg-flow {
-  background-size: 200% 200%;
-  animation: nav-bg-flow 20s ease-in-out infinite;
+.dark .animate-seal-glow {
+  animation: seal-glow-dark 3.5s ease-in-out infinite;
 }
 
 @keyframes wuxing-glow {
@@ -204,16 +172,6 @@ body {
 .animate-elem-rise {
   animation: elem-rise 0.6s cubic-bezier(0.22, 1, 0.36, 1) forwards;
   opacity: 1;
-}
-
-.wuxing-nav-bg {
-  background-size: 300% 100%;
-  animation: wuxing-flow 12s ease-in-out infinite;
-}
-
-.wuxing-nav-bg-dark {
-  background-size: 300% 100%;
-  animation: wuxing-flow 12s ease-in-out infinite;
 }
 
 @layer components {
